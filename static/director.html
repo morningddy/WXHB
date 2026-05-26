@@ -395,17 +395,25 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
                         <span class="bottom-label" style="width:14px">Z</span>
                         <input type="number" class="prop-input" id="inp-pz" value="0" step="0.1" oninput="updateTransform()">
                     </div>
-                    <div class="prop-row">
-                        <span class="bottom-label" style="width:28px">旋转</span>
-                        <input type="number" class="prop-input" id="inp-rx" value="0" step="1" oninput="updateTransform()">
-                        <input type="number" class="prop-input" id="inp-ry" value="0" step="1" oninput="updateTransform()">
-                        <input type="number" class="prop-input" id="inp-rz" value="0" step="1" oninput="updateTransform()">
+                    <div id="rot-rows">
+                        <div class="prop-row">
+                            <span class="bottom-label" style="width:28px">旋转</span>
+                            <input type="number" class="prop-input" id="inp-rx" value="0" step="1" oninput="updateTransform()">
+                            <input type="number" class="prop-input" id="inp-ry" value="0" step="1" oninput="updateTransform()">
+                            <input type="number" class="prop-input" id="inp-rz" value="0" step="1" oninput="updateTransform()">
+                        </div>
                     </div>
-                    <div class="prop-row">
-                        <span class="bottom-label" style="width:28px">缩放</span>
-                        <input type="number" class="prop-input" id="inp-sx" value="1" step="0.1" min="0.01" oninput="updateTransform()">
-                        <input type="number" class="prop-input" id="inp-sy" value="1" step="0.1" min="0.01" oninput="updateTransform()">
-                        <input type="number" class="prop-input" id="inp-sz" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                    <div id="scale-rows">
+                        <div class="prop-row">
+                            <span class="bottom-label" style="width:28px">缩放</span>
+                            <input type="number" class="prop-input" id="inp-sx" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                            <input type="number" class="prop-input" id="inp-sy" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                            <input type="number" class="prop-input" id="inp-sz" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                        </div>
+                    </div>
+                    <div class="prop-row" id="mesh-color-row">
+                        <label class="prop-label" style="width:28px">颜色</label>
+                        <input type="color" class="prop-color" id="mesh-color" value="#6c5ce7" oninput="applyMeshColor()">
                     </div>
                 </div>
                 <div class="prop-group">
@@ -510,8 +518,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
                     </div>
                     <div class="prop-row">
                         <label class="prop-label">强度</label>
-                        <input class="prop-slider" type="range" id="light-intensity" min="0" max="300" value="100" oninput="applyLightProps()" style="width:100px;">
-                        <span class="prop-value" id="light-intensity-val">1.0</span>
+                        <input class="prop-input" type="number" id="light-intensity" value="1" min="0" max="100" step="0.1" oninput="applyLightProps()" style="width:70px;">
                     </div>
                     <div class="prop-row">
                         <label class="prop-label">颜色</label>
@@ -803,6 +810,23 @@ function animate(time) {
         }
     }
 
+    // 更新聚光灯 targetLine 位置（target被拖拽时实时跟随）
+    objects.forEach(obj => {
+        if (obj.userData.lightType === 'spot' && obj.userData.spotGizmo) {
+            const targetDot = obj.userData.spotGizmo.getObjectByName('SpotLightTarget');
+            const targetLine = obj.userData.spotGizmo.getObjectByName('SpotLightTargetLine');
+            if (targetDot && targetLine && targetLine.geometry) {
+                const pos = targetLine.geometry.attributes.position;
+                if (pos) {
+                    pos.array[3] = targetDot.position.x;
+                    pos.array[4] = targetDot.position.y;
+                    pos.array[5] = targetDot.position.z;
+                    pos.needsUpdate = true;
+                }
+            }
+        }
+    });
+
     renderer.render(scene, camera);
 }
 
@@ -853,12 +877,16 @@ function addObject(type) {
             const mat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
             mesh = new THREE.Mesh(geo, mat);
             mesh.name = '灯光_' + (objects.length + 1);
+            mesh.castShadow = false;
+            mesh.receiveShadow = false;
             // 默认创建点光源
             const light = new THREE.PointLight(0xfff5e6, 1, 20);
             light.castShadow = true;
             mesh.add(light);
             mesh.userData.lightSource = light;
             mesh.userData.lightType = 'point';
+            // 聚光辅助线框容器（spot类型时填充）
+            mesh.userData.spotGizmo = null;
             break;
         }
         case 'character': {
@@ -1130,6 +1158,11 @@ function deleteSelected() {
         if (node) target = node;
     }
 
+    // 如果选中的是聚光 target 点，删除父灯光
+    if (selectedObj.userData && selectedObj.userData.isSpotLightTarget) {
+        target = selectedObj.userData.parentLight;
+    }
+
     scene.remove(target);
     objects = objects.filter(o => o !== target);
     // 如果是相机对象，也从 cameraObjects 中移除
@@ -1176,17 +1209,35 @@ function updateObjectTree() {
     const tree = document.getElementById('object-tree');
     const allObjects = [...objects, ...cameraObjects];
 
-    // 获取一个节点的人形子节点列表
-    function getHumanChildren(obj) {
+    // 获取一个节点的树子节点列表（人形部位 + 聚光target点）
+    function getTreeChildren(obj) {
         if (!obj.children) return [];
-        return obj.children.filter(child => child.userData && (child.userData.isHumanPart || child.userData.isHumanJoint || child.userData.isHuman));
+        const result = [];
+        // 直接子节点
+        obj.children.forEach(child => {
+            if (!child.userData) return;
+            if (child.userData.isHumanPart || child.userData.isHumanJoint || child.userData.isHuman) {
+                result.push(child);
+            }
+            // 聚光辅助线框中的 target 点（孙节点）
+            if (child.name === 'SpotLightGizmo' && child.children) {
+                child.children.forEach(grandchild => {
+                    if (grandchild.userData && grandchild.userData.isSpotLightTarget) {
+                        result.push(grandchild);
+                    }
+                });
+            }
+        });
+        return result;
     }
 
     function renderNode(obj, depth) {
         const isSel = selectedObj === obj;
         const indent = depth * 14;
         let icon;
-        if (obj.userData && obj.userData.isHumanPart) {
+        if (obj.userData && obj.userData.isSpotLightTarget) {
+            icon = '🎯';
+        } else if (obj.userData && obj.userData.isHumanPart) {
             icon = '🦴';
         } else if (obj.userData && obj.userData.isHumanJoint) {
             icon = '⚙️';
@@ -1194,7 +1245,7 @@ function updateObjectTree() {
             icon = getObjIcon(obj.userData && obj.userData.type ? obj.userData.type : 'prop');
         }
         const name = obj.name || '未命名';
-        const children = getHumanChildren(obj);
+        const children = getTreeChildren(obj);
         const hasChildren = children.length > 0;
         const isExpanded = treeExpandedState[obj.uuid] !== false; // 默认展开
 
@@ -1303,17 +1354,32 @@ function updatePropsPanel() {
     defaultPanel.style.display = 'block';
     transformGroup.style.display = 'block';
     const p = selectedObj.position;
-    const r = selectedObj.rotation;
-    const s = selectedObj.scale;
     document.getElementById('inp-px').value = p.x.toFixed(2);
     document.getElementById('inp-py').value = p.y.toFixed(2);
     document.getElementById('inp-pz').value = p.z.toFixed(2);
-    document.getElementById('inp-rx').value = THREE.MathUtils.radToDeg(r.x).toFixed(0);
-    document.getElementById('inp-ry').value = THREE.MathUtils.radToDeg(r.y).toFixed(0);
-    document.getElementById('inp-rz').value = THREE.MathUtils.radToDeg(r.z).toFixed(0);
-    document.getElementById('inp-sx').value = s.x.toFixed(2);
-    document.getElementById('inp-sy').value = s.y.toFixed(2);
-    document.getElementById('inp-sz').value = s.z.toFixed(2);
+
+    // 聚光 target 点只显示位置，隐藏旋转/缩放/颜色
+    const isTarget = selectedObj.userData && selectedObj.userData.isSpotLightTarget;
+    const rotRows = document.getElementById('rot-rows');
+    const scaleRows = document.getElementById('scale-rows');
+    const colorRow = document.getElementById('mesh-color-row');
+    if (rotRows) rotRows.style.display = isTarget ? 'none' : 'block';
+    if (scaleRows) scaleRows.style.display = isTarget ? 'none' : 'block';
+    if (colorRow) colorRow.style.display = isTarget ? 'none' : 'flex';
+
+    if (!isTarget) {
+        const r = selectedObj.rotation;
+        const s = selectedObj.scale;
+        document.getElementById('inp-rx').value = THREE.MathUtils.radToDeg(r.x).toFixed(0);
+        document.getElementById('inp-ry').value = THREE.MathUtils.radToDeg(r.y).toFixed(0);
+        document.getElementById('inp-rz').value = THREE.MathUtils.radToDeg(r.z).toFixed(0);
+        document.getElementById('inp-sx').value = s.x.toFixed(2);
+        document.getElementById('inp-sy').value = s.y.toFixed(2);
+        document.getElementById('inp-sz').value = s.z.toFixed(2);
+        // 读取当前颜色
+        const colorHex = getMeshColor(selectedObj);
+        if (colorHex) document.getElementById('mesh-color').value = colorHex;
+    }
 }
 
 function renderCameraProps(camObj) {
@@ -1370,8 +1436,7 @@ function renderLightProps(lightObj) {
     if (!light) return;
     const type = lightObj.userData.lightType || 'point';
     document.getElementById('light-type').value = type;
-    document.getElementById('light-intensity').value = Math.round(light.intensity * 100);
-    document.getElementById('light-intensity-val').textContent = light.intensity.toFixed(1);
+    document.getElementById('light-intensity').value = light.intensity.toFixed(1);
     document.getElementById('light-color-obj').value = '#' + light.color.getHexString();
     document.getElementById('light-px').value = lightObj.position.x.toFixed(2);
     document.getElementById('light-py').value = lightObj.position.y.toFixed(2);
@@ -1401,7 +1466,7 @@ function applyLightProps() {
     if (!selectedObj || selectedObj.userData.type !== 'light') return;
     const newType = document.getElementById('light-type').value;
     const oldType = selectedObj.userData.lightType || 'point';
-    const intensity = parseFloat(document.getElementById('light-intensity').value) / 100;
+    const intensity = parseFloat(document.getElementById('light-intensity').value) || 0;
     const color = document.getElementById('light-color-obj').value;
 
     // 如果类型变了，重建光源对象
@@ -1426,6 +1491,7 @@ function applyLightProps() {
             newLight = new THREE.SpotLight(color, intensity, dist, angle, penumbra, decay);
             newLight.castShadow = true;
             newLight.shadow.mapSize.set(2048, 2048);
+            newLight.shadow.bias = -0.0005;
         } else {
             const dist = parseFloat(document.getElementById('light-distance').value) || 10;
             const decay = parseFloat(document.getElementById('light-decay').value) || 2;
@@ -1435,6 +1501,15 @@ function applyLightProps() {
         selectedObj.add(newLight);
         selectedObj.userData.lightSource = newLight;
         selectedObj.userData.lightType = newType;
+        // 聚光类型时创建辅助线框，其他类型时移除
+        if (newType === 'spot') {
+            createSpotLightGizmo(selectedObj);
+        } else {
+            if (selectedObj.userData.spotGizmo) {
+                selectedObj.remove(selectedObj.userData.spotGizmo);
+                selectedObj.userData.spotGizmo = null;
+            }
+        }
         // 更新名称
         const typeNames = { point: '点光', directional: '日光', spot: '聚光' };
         const baseName = selectedObj.name.replace(/_.*$/, '') || '灯光';
@@ -1452,17 +1527,116 @@ function applyLightProps() {
         if (newType === 'spot') {
             light.angle = THREE.MathUtils.degToRad(parseFloat(document.getElementById('light-angle').value) || 45);
             light.penumbra = parseFloat(document.getElementById('light-penumbra').value) / 100 || 0;
+            // 参数变了，重建辅助线框
+            createSpotLightGizmo(selectedObj);
         }
     }
 
-    document.getElementById('light-intensity-val').textContent = intensity.toFixed(1);
     if (newType === 'spot') {
         document.getElementById('light-angle-val').textContent = document.getElementById('light-angle').value + '°';
         document.getElementById('light-penumbra-val').textContent = (parseFloat(document.getElementById('light-penumbra').value) / 100).toFixed(2);
     }
-    // 刷新面板以显示/隐藏对应参数行
-    renderLightProps(selectedObj);
-    updateObjectTree();
+}
+
+// ============ 聚光辅助线框（Blender风格）============
+function createSpotLightGizmo(lightObj) {
+    // 移除旧的（如果当前正在拖动target点，先detach）
+    let oldTargetWorldPos = null;
+    if (lightObj.userData.spotGizmo) {
+        const oldTarget = lightObj.userData.spotGizmo.getObjectByName('SpotLightTarget');
+        if (oldTarget) {
+            // 记录旧target的世界位置，重建后恢复
+            oldTargetWorldPos = new THREE.Vector3();
+            oldTarget.getWorldPosition(oldTargetWorldPos);
+            if (selectedObj === oldTarget && transformControl) {
+                transformControl.detach();
+            }
+        }
+        lightObj.remove(lightObj.userData.spotGizmo);
+        lightObj.userData.spotGizmo = null;
+    }
+    const light = lightObj.userData.lightSource;
+    if (!light || !(light instanceof THREE.SpotLight)) return;
+
+    const gizmo = new THREE.Group();
+    gizmo.name = 'SpotLightGizmo';
+    const orange = 0xffaa44;
+    const yellow = 0xffdd33;
+
+    // 1. 锥形线框：12条斜线（光源→底部圆环），保证视觉完整
+    const dist = light.distance || 10;
+    const angle = light.angle || Math.PI / 4;
+    const radius = Math.tan(angle) * dist;
+
+    const coneVerts = [];
+    const lineSegs = 12;
+    for (let i = 0; i < lineSegs; i++) {
+        const a = (i / lineSegs) * Math.PI * 2;
+        coneVerts.push(0, 0, 0, Math.cos(a) * radius, -dist, Math.sin(a) * radius);
+    }
+    const coneGeo = new THREE.BufferGeometry();
+    coneGeo.setAttribute('position', new THREE.Float32BufferAttribute(coneVerts, 3));
+    const coneLines = new THREE.LineSegments(coneGeo, new THREE.LineBasicMaterial({ color: orange }));
+    gizmo.add(coneLines);
+
+    // 2. 底部双圆环：内圆=硬边缘，外圆=软边缘（penumbra）
+    const penumbra = light.penumbra || 0;
+    const innerR = radius;
+    const outerR = radius * (1 + penumbra * 0.5);
+
+    function makeRingGeo(r, segs) {
+        const v = [];
+        for (let i = 0; i < segs; i++) {
+            const a1 = (i / segs) * Math.PI * 2;
+            const a2 = ((i + 1) / segs) * Math.PI * 2;
+            v.push(Math.cos(a1) * r, -dist, Math.sin(a1) * r);
+            v.push(Math.cos(a2) * r, -dist, Math.sin(a2) * r);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+        return g;
+    }
+
+    const innerRing = new THREE.LineSegments(makeRingGeo(innerR, 32), new THREE.LineBasicMaterial({ color: orange }));
+    const outerRing = new THREE.LineSegments(makeRingGeo(outerR, 32), new THREE.LineBasicMaterial({ color: orange, transparent: true, opacity: 0.4 }));
+    gizmo.add(innerRing);
+    gizmo.add(outerRing);
+
+    // 3. 中心黄点（target）—— 可拖拽控制光朝向
+    const targetGeo = new THREE.SphereGeometry(0.12, 16, 16);
+    const targetMat = new THREE.MeshBasicMaterial({ color: yellow });
+    const targetDot = new THREE.Mesh(targetGeo, targetMat);
+    targetDot.name = 'SpotLightTarget';
+    targetDot.userData.isSpotLightTarget = true;
+    targetDot.userData.parentLight = lightObj;
+    targetDot.castShadow = false;
+    targetDot.receiveShadow = false;
+    // 如果有旧target位置，恢复它；否则使用默认位置
+    if (oldTargetWorldPos) {
+        const localPos = lightObj.worldToLocal(oldTargetWorldPos.clone());
+        targetDot.position.copy(localPos);
+    } else {
+        targetDot.position.set(0, -dist, 0);
+    }
+    gizmo.add(targetDot);
+    // 绑定 SpotLight.target 到黄点，这样拖动黄点时光方向自动更新
+    light.target = targetDot;
+
+    // 4. target 到光源的连线（终点跟随 targetDot）
+    const tp = targetDot.position;
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0, tp.x,tp.y,tp.z], 3));
+    const targetLine = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: yellow, transparent: true, opacity: 0.6 }));
+    targetLine.name = 'SpotLightTargetLine';
+    gizmo.add(targetLine);
+
+    lightObj.add(gizmo);
+    lightObj.userData.spotGizmo = gizmo;
+}
+
+function updateSpotLightGizmo(lightObj) {
+    // 完全重建（参数变了锥形尺寸会变）
+    createSpotLightGizmo(lightObj);
 }
 
 function applyLightTransform() {
@@ -1471,6 +1645,39 @@ function applyLightTransform() {
     const py = parseFloat(document.getElementById('light-py').value) || 0;
     const pz = parseFloat(document.getElementById('light-pz').value) || 0;
     selectedObj.position.set(px, py, pz);
+}
+
+// ============ 普通物体颜色控制 ============
+function getMeshColor(obj) {
+    // 递归查找第一个 Mesh，返回其材质颜色的 hex 字符串
+    let target = obj;
+    if (target.material && target.material.color) {
+        return '#' + target.material.color.getHexString();
+    }
+    if (target.children) {
+        for (let i = 0; i < target.children.length; i++) {
+            const c = getMeshColor(target.children[i]);
+            if (c) return c;
+        }
+    }
+    return null;
+}
+
+function applyMeshColor() {
+    if (!selectedObj) return;
+    const hex = document.getElementById('mesh-color').value;
+    const color = new THREE.Color(hex);
+    // 遍历所有 Mesh 子对象，修改材质颜色（排除眼睛/嘴巴等基本材质）
+    selectedObj.traverse(child => {
+        if (child.isMesh && child.material && child.material.color) {
+            // 跳过眼睛、嘴巴等面部特征（MeshBasicMaterial 且尺寸极小）
+            if (child.material.type === 'MeshBasicMaterial' && child.geometry) {
+                const geo = child.geometry;
+                if (geo.parameters && (geo.parameters.radius < 0.03 || geo.parameters.width < 0.03)) return;
+            }
+            child.material.color.set(color);
+        }
+    });
 }
 
 function snapToCamera(uuid) {
@@ -1567,15 +1774,20 @@ function updateTransform() {
     const px = parseFloat(document.getElementById('inp-px').value) || 0;
     const py = parseFloat(document.getElementById('inp-py').value) || 0;
     const pz = parseFloat(document.getElementById('inp-pz').value) || 0;
-    const rx = THREE.MathUtils.degToRad(parseFloat(document.getElementById('inp-rx').value) || 0);
-    const ry = THREE.MathUtils.degToRad(parseFloat(document.getElementById('inp-ry').value) || 0);
-    const rz = THREE.MathUtils.degToRad(parseFloat(document.getElementById('inp-rz').value) || 0);
-    const sx = parseFloat(document.getElementById('inp-sx').value) || 1;
-    const sy = parseFloat(document.getElementById('inp-sy').value) || 1;
-    const sz = parseFloat(document.getElementById('inp-sz').value) || 1;
     selectedObj.position.set(px, py, pz);
-    selectedObj.rotation.set(rx, ry, rz);
-    selectedObj.scale.set(sx, sy, sz);
+
+    // 聚光 target 点只更新位置，不更新旋转/缩放
+    const isTarget = selectedObj.userData && selectedObj.userData.isSpotLightTarget;
+    if (!isTarget) {
+        const rx = THREE.MathUtils.degToRad(parseFloat(document.getElementById('inp-rx').value) || 0);
+        const ry = THREE.MathUtils.degToRad(parseFloat(document.getElementById('inp-ry').value) || 0);
+        const rz = THREE.MathUtils.degToRad(parseFloat(document.getElementById('inp-rz').value) || 0);
+        const sx = parseFloat(document.getElementById('inp-sx').value) || 1;
+        const sy = parseFloat(document.getElementById('inp-sy').value) || 1;
+        const sz = parseFloat(document.getElementById('inp-sz').value) || 1;
+        selectedObj.rotation.set(rx, ry, rz);
+        selectedObj.scale.set(sx, sy, sz);
+    }
 
     // 重新 attach Gizmo（所有对象都支持）
     if (transformControl && selectedObj) {
@@ -2173,13 +2385,14 @@ function onCanvasClick(e) {
     const hits = ray.intersectObjects(allObjs, true);
     if (hits.length > 0) {
         let obj = hits[0].object;
-        // 找到可选中的节点：allObjs 中的对象 或 人形部位
+        // 找到可选中的节点：allObjs 中的对象 / 人形部位 / 聚光target点
         while (obj.parent) {
             if (allObjs.includes(obj)) break;
             if (obj.userData && (obj.userData.isHumanPart || obj.userData.isHumanJoint)) break;
+            if (obj.userData && obj.userData.isSpotLightTarget) break;
             obj = obj.parent;
         }
-        if (allObjs.includes(obj) || (obj.userData && (obj.userData.isHumanPart || obj.userData.isHumanJoint))) {
+        if (allObjs.includes(obj) || (obj.userData && (obj.userData.isHumanPart || obj.userData.isHumanJoint || obj.userData.isSpotLightTarget))) {
             selectObject(obj);
         }
     }
