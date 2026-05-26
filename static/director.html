@@ -874,8 +874,8 @@ function addObject(type) {
                 return ring;
             }
 
-            // === 躯干（蓝色胶囊体）===
-            const torso = makePart('躯干', new THREE.CapsuleGeometry(0.18, 0.6, 8, 16), bodyMat, {y: 0.6}, human);
+            // === 躯干（蓝色圆柱体，r124 无 CapsuleGeometry）===
+            const torso = makePart('躯干', new THREE.CylinderGeometry(0.18, 0.18, 0.6, 12), bodyMat, {y: 0.6}, human);
 
             // === 头部（白色球体 + 面部特征）===
             const head = makePart('头部', new THREE.SphereGeometry(0.16, 16, 16), headMat, {y: 0.55}, torso);
