@@ -1004,9 +1004,6 @@ THREE.TransformControlsGizmo = function () {
 		],
 		XYZZ: [
 			[ new THREE.Mesh( new THREE.BoxBufferGeometry( 0.125, 0.125, 0.125 ), matWhiteTransparent.clone() ), [ 0, 0, 1.1 ]],
-		],
-		XYZ: [
-			[ new THREE.Mesh( new THREE.BoxBufferGeometry( 0.18, 0.18, 0.18 ), matWhiteTransparent.clone() ), [ 0, 0, 0 ]]
 		]
 	};
 
@@ -1037,9 +1034,6 @@ THREE.TransformControlsGizmo = function () {
 		],
 		XYZZ: [
 			[ new THREE.Mesh( new THREE.BoxBufferGeometry( 0.2, 0.2, 0.2 ), matInvisible ), [ 0, 0, 1.1 ]],
-		],
-		XYZ: [
-			[ new THREE.Mesh( new THREE.BoxBufferGeometry( 0.25, 0.25, 0.25 ), matInvisible ), [ 0, 0, 0 ]]
 		]
 	};
 

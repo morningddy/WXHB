@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -9055,7 +9055,7 @@
 
         // ===== 3D 场景编辑器窗口系统 =====
         let _drgWin = null, _drgOffX = 0, _drgOffY = 0;
-        let _drgResize = false, _drgRX = 0, _drgRW = 0, _drgRH = 0;
+        let _drgResize = false, _drgRX = 0, _drgRY = 0, _drgRW = 0, _drgRH = 0;
 
         function openDirectorWindow() {
             var win = document.getElementById('directorWindow');
@@ -9080,49 +9080,6 @@
             if (frame) frame.src = frame.src;
         }
 
-        // 标题栏拖拽
-        (function() {
-            var win = document.getElementById('directorWindow');
-            var bar = document.getElementById('directorTitlebar');
-            if (!win || !bar) return;
-            bar.addEventListener('mousedown', function(e) {
-                if (e.target.closest('.director-win-actions')) return;
-                _drgWin = win;
-                win.style.transform = 'none';
-                var rect = win.getBoundingClientRect();
-                _drgOffX = e.clientX - rect.left;
-                _drgOffY = e.clientY - rect.top;
-                e.preventDefault();
-            });
-            document.addEventListener('mousemove', function(e) {
-                if (!_drgWin) return;
-                _drgWin.style.left = (e.clientX - _drgOffX) + 'px';
-                _drgWin.style.top  = (e.clientY - _drgOffY) + 'px';
-            });
-            document.addEventListener('mouseup', function() { _drgWin = null; });
-        })();
-
-        // 右下角缩放
-        (function() {
-            var win = document.getElementById('directorWindow');
-            var handle = document.getElementById('directorResizeHandle');
-            if (!win || !handle) return;
-            handle.addEventListener('mousedown', function(e) {
-                _drgResize = true;
-                _drgRX = e.clientX;
-                _drgRW = win.offsetWidth;
-                _drgRH = win.offsetHeight;
-                e.preventDefault(); e.stopPropagation();
-            });
-            document.addEventListener('mousemove', function(e) {
-                if (!_drgResize) return;
-                var nw = Math.max(600, _drgRW + (e.clientX - _drgRX));
-                var nh = Math.max(400, _drgRH + (e.clientY - _drgRY));
-                win.style.width  = nw + 'px';
-                win.style.height = nh + 'px';
-            });
-            document.addEventListener('mouseup', function() { _drgResize = false; });
-        })();
 
         // 接收来自 director.html iframe 的消息（截图/视频）
         window.addEventListener('message', async function(event) {
@@ -9187,6 +9144,55 @@
                 '</div>' +
                 '<div class="director-resize-handle" id="directorResizeHandle"></div>';
             document.body.appendChild(wrap);
+            // 延迟绑定拖拽/缩放事件（等 DOM 创建完成）
+            setTimeout(function() {
+                // 标题栏拖拽
+                var win = document.getElementById('directorWindow');
+                var bar = document.getElementById('directorTitlebar');
+                if (win && bar) {
+                    bar.addEventListener('mousedown', function(e) {
+                        if (e.target.closest('.director-win-actions')) return;
+                        _dragWin = win;
+                        win.style.transform = 'none';
+                        var rect = win.getBoundingClientRect();
+                        _dragOffX = e.clientX - rect.left;
+                        _dragOffY = e.clientY - rect.top;
+                        e.preventDefault();
+                    });
+                }
+                // 右下角缩放
+                var handle = document.getElementById('directorResizeHandle');
+                if (win && handle) {
+                    handle.addEventListener('mousedown', function(e) {
+                        _dragResize = true;
+                        _dragRX = e.clientX;
+                        _dragRY = e.clientY;
+                        _dragRW = win.offsetWidth;
+                        _dragRH = win.offsetHeight;
+                        e.preventDefault(); e.stopPropagation();
+                    });
+                }
+
+                // 鼠标移动：拖拽 + 缩放
+                document.addEventListener('mousemove', function(e) {
+                    if (_drgWin) {
+                        _drgWin.style.left = (e.clientX - _drgOffX) + 'px';
+                        _drgWin.style.top  = (e.clientY - _drgOffY) + 'px';
+                    }
+                    if (_drgResize) {
+                        var nw = Math.max(600, _drgRW + (e.clientX - _drgRX));
+                        var nh = Math.max(400, _drgRH + (e.clientY - _drgRY));
+                        win.style.width  = nw + 'px';
+                        win.style.height = nh + 'px';
+                    }
+                });
+
+                // 鼠标抬起：停止拖拽/缩放
+                document.addEventListener('mouseup', function() {
+                    _drgWin = null;
+                    _drgResize = false;
+                });
+            }, 0);
         })();
 
         window.onload = async () => {
@@ -9212,3 +9218,4 @@
     </script>
 </body>
 </html>
+
