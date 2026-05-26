@@ -353,67 +353,164 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
             <span class="panel-title">属性</span>
         </div>
         <div id="props-content">
-            <div class="prop-group">
-                <div class="prop-label">相机</div>
-                <div class="prop-row">
-                    <span class="bottom-label" style="width:50px">FOV</span>
-                    <input type="range" class="prop-slider" id="slider-fov" min="20" max="120" value="50" oninput="updateFOV(this.value)">
-                    <span class="prop-value" id="val-fov">50°</span>
+            <!-- 未选中提示 -->
+            <div id="props-overlay" style="display:none; padding:20px 12px; font-size:11px; color:var(--muted); text-align:center;">
+                选中对象以编辑属性
+            </div>
+
+            <!-- 默认面板：全局控制 + 普通对象变换 -->
+            <div id="props-default">
+                <div class="prop-group">
+                    <div class="prop-label">相机</div>
+                    <div class="prop-row">
+                        <span class="bottom-label" style="width:50px">FOV</span>
+                        <input type="range" class="prop-slider" id="slider-fov" min="20" max="120" value="50" oninput="updateFOV(this.value)">
+                        <span class="prop-value" id="val-fov">50°</span>
+                    </div>
+                    <div class="prop-row">
+                        <span class="bottom-label" style="width:50px">距离</span>
+                        <input type="range" class="prop-slider" id="slider-dist" min="1" max="50" value="10" oninput="updateDist(this.value)">
+                        <span class="prop-value" id="val-dist">10</span>
+                    </div>
                 </div>
-                <div class="prop-row">
-                    <span class="bottom-label" style="width:50px">距离</span>
-                    <input type="range" class="prop-slider" id="slider-dist" min="1" max="50" value="10" oninput="updateDist(this.value)">
-                    <span class="prop-value" id="val-dist">10</span>
+                <div class="prop-group" id="transform-group">
+                    <div class="prop-label">变换</div>
+                    <div class="prop-row">
+                        <span class="bottom-label" style="width:14px">X</span>
+                        <input type="number" class="prop-input" id="inp-px" value="0" step="0.1" oninput="updateTransform()">
+                        <span class="bottom-label" style="width:14px">Y</span>
+                        <input type="number" class="prop-input" id="inp-py" value="0" step="0.1" oninput="updateTransform()">
+                        <span class="bottom-label" style="width:14px">Z</span>
+                        <input type="number" class="prop-input" id="inp-pz" value="0" step="0.1" oninput="updateTransform()">
+                    </div>
+                    <div class="prop-row">
+                        <span class="bottom-label" style="width:28px">旋转</span>
+                        <input type="number" class="prop-input" id="inp-rx" value="0" step="1" oninput="updateTransform()">
+                        <input type="number" class="prop-input" id="inp-ry" value="0" step="1" oninput="updateTransform()">
+                        <input type="number" class="prop-input" id="inp-rz" value="0" step="1" oninput="updateTransform()">
+                    </div>
+                    <div class="prop-row">
+                        <span class="bottom-label" style="width:28px">缩放</span>
+                        <input type="number" class="prop-input" id="inp-sx" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                        <input type="number" class="prop-input" id="inp-sy" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                        <input type="number" class="prop-input" id="inp-sz" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                    </div>
+                </div>
+                <div class="prop-group">
+                    <div class="prop-label">场景灯光</div>
+                    <div class="prop-row">
+                        <label class="prop-label" style="width:50px">环境光</label>
+                        <input type="range" class="prop-slider" id="slider-ambient" min="0" max="100" value="40" oninput="updateAmbient(this.value)">
+                        <span class="prop-value" id="val-ambient">40%</span>
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label" style="width:50px">方向光</label>
+                        <input type="range" class="prop-slider" id="slider-dir" min="0" max="200" value="120" oninput="updateDirLight(this.value)">
+                        <span class="prop-value" id="val-dir">1.2</span>
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label" style="width:50px">补光</label>
+                        <input type="range" class="prop-slider" id="slider-fill" min="0" max="100" value="30" oninput="updateFillLight(this.value)">
+                        <span class="prop-value" id="val-fill">0.3</span>
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label" style="width:50px">色温</label>
+                        <input type="color" class="prop-color" id="light-color" value="#fff5e6" onchange="updateLightColor(this.value)" title="方向光颜色">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label" style="width:50px">阴影</label>
+                        <input type="checkbox" class="prop-checkbox" id="chk-shadow" checked onchange="toggleShadow(this.checked)" title="投射阴影">
+                        <span class="prop-unit" style="font-size:10px">开启</span>
+                    </div>
                 </div>
             </div>
-            <div class="prop-group">
-                <div class="prop-label">变换</div>
-                <div class="prop-row">
-                    <span class="bottom-label" style="width:14px">X</span>
-                    <input type="number" class="prop-input" id="inp-px" value="0" step="0.1" oninput="updateTransform()">
-                    <span class="bottom-label" style="width:14px">Y</span>
-                    <input type="number" class="prop-input" id="inp-py" value="0" step="0.1" oninput="updateTransform()">
-                    <span class="bottom-label" style="width:14px">Z</span>
-                    <input type="number" class="prop-input" id="inp-pz" value="0" step="0.1" oninput="updateTransform()">
+
+            <!-- 相机参数面板（选中相机时显示） -->
+            <div id="props-camera-panel" style="display:none;">
+                <div class="prop-group">
+                    <div class="prop-label">📷 相机参数</div>
                 </div>
-                <div class="prop-row">
-                    <span class="bottom-label" style="width:28px">旋转</span>
-                    <input type="number" class="prop-input" id="inp-rx" value="0" step="1" oninput="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-ry" value="0" step="1" oninput="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-rz" value="0" step="1" oninput="updateTransform()">
+                <div class="prop-group">
+                    <div class="prop-row">
+                        <label class="prop-label">FOV</label>
+                        <input class="prop-input" type="number" id="cam-fov" value="50" min="10" max="120" oninput="applyCameraProps()" style="width:70px;">
+                        <span class="prop-unit">°</span>
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">Near</label>
+                        <input class="prop-input" type="number" id="cam-near" value="0.1" min="0.01" max="100" step="0.1" oninput="applyCameraProps()" style="width:70px;">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">Far</label>
+                        <input class="prop-input" type="number" id="cam-far" value="1000" min="10" max="10000" step="10" oninput="applyCameraProps()" style="width:70px;">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">焦距</label>
+                        <input class="prop-input" type="number" id="cam-focal" value="35" min="10" max="200" step="1" oninput="applyCameraProps()" style="width:70px;">
+                        <span class="prop-unit">mm</span>
+                    </div>
                 </div>
-                <div class="prop-row">
-                    <span class="bottom-label" style="width:28px">缩放</span>
-                    <input type="number" class="prop-input" id="inp-sx" value="1" step="0.1" min="0.01" oninput="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-sy" value="1" step="0.1" min="0.01" oninput="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-sz" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                <div class="prop-group">
+                    <button class="prop-btn" id="btn-snap-cam" style="width:100%;padding:6px 0;border-radius:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;" onclick="snapToCamera(selectedObj.uuid)">
+                        📷 设为当前相机
+                    </button>
+                </div>
+                <div class="prop-group">
+                    <div class="prop-label">变换</div>
+                    <div class="prop-row">
+                        <label class="prop-label">位置 X</label>
+                        <input class="prop-input" type="number" id="cam-px" value="0" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">位置 Y</label>
+                        <input class="prop-input" type="number" id="cam-py" value="0" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">位置 Z</label>
+                        <input class="prop-input" type="number" id="cam-pz" value="0" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">旋转 Y</label>
+                        <input class="prop-input" type="number" id="cam-ry" value="0" step="1" oninput="applyCameraTransform()" style="width:65px;">
+                        <span class="prop-unit">°</span>
+                    </div>
                 </div>
             </div>
-            <div class="prop-group">
-                <div class="prop-label">场景灯光</div>
-                <div class="prop-row">
-                    <label class="prop-label" style="width:50px">环境光</label>
-                    <input type="range" class="prop-slider" id="slider-ambient" min="0" max="100" value="40" oninput="updateAmbient(this.value)">
-                    <span class="prop-value" id="val-ambient">40%</span>
+
+            <!-- 灯光参数面板（选中灯光时显示） -->
+            <div id="props-light-panel" style="display:none;">
+                <div class="prop-group">
+                    <div class="prop-label">💡 灯光参数</div>
                 </div>
-                <div class="prop-row">
-                    <label class="prop-label" style="width:50px">方向光</label>
-                    <input type="range" class="prop-slider" id="slider-dir" min="0" max="200" value="120" oninput="updateDirLight(this.value)">
-                    <span class="prop-value" id="val-dir">1.2</span>
+                <div class="prop-group">
+                    <div class="prop-row">
+                        <label class="prop-label">强度</label>
+                        <input class="prop-slider" type="range" id="light-intensity" min="0" max="300" value="100" oninput="applyLightProps()" style="width:100px;">
+                        <span class="prop-value" id="light-intensity-val">1.0</span>
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">颜色</label>
+                        <input class="prop-color" type="color" id="light-color-obj" value="#ffffff" oninput="applyLightProps()">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">范围</label>
+                        <input class="prop-input" type="number" id="light-distance" value="10" min="0.1" max="100" step="0.1" oninput="applyLightProps()" style="width:70px;">
+                    </div>
+                    <div class="prop-row">
+                        <label class="prop-label">衰减</label>
+                        <input class="prop-input" type="number" id="light-decay" value="2" min="0" max="10" step="0.1" oninput="applyLightProps()" style="width:70px;">
+                    </div>
                 </div>
-                <div class="prop-row">
-                    <label class="prop-label" style="width:50px">补光</label>
-                    <input type="range" class="prop-slider" id="slider-fill" min="0" max="100" value="30" oninput="updateFillLight(this.value)">
-                    <span class="prop-value" id="val-fill">0.3</span>
-                </div>
-                <div class="prop-row">
-                    <label class="prop-label" style="width:50px">色温</label>
-                    <input type="color" class="prop-color" id="light-color" value="#fff5e6" onchange="updateLightColor(this.value)" title="方向光颜色">
-                </div>
-                <div class="prop-row">
-                    <label class="prop-label" style="width:50px">阴影</label>
-                    <input type="checkbox" class="prop-checkbox" id="chk-shadow" checked onchange="toggleShadow(this.checked)" title="投射阴影">
-                    <span class="prop-unit" style="font-size:10px">开启</span>
+                <div class="prop-group">
+                    <div class="prop-label">变换</div>
+                    <div class="prop-row">
+                        <span class="bottom-label" style="width:14px">X</span>
+                        <input type="number" class="prop-input" id="light-px" value="0" step="0.1" oninput="applyLightTransform()">
+                        <span class="bottom-label" style="width:14px">Y</span>
+                        <input type="number" class="prop-input" id="light-py" value="2" step="0.1" oninput="applyLightTransform()">
+                        <span class="bottom-label" style="width:14px">Z</span>
+                        <input type="number" class="prop-input" id="light-pz" value="0" step="0.1" oninput="applyLightTransform()">
+                    </div>
                 </div>
             </div>
         </div>
@@ -696,6 +793,7 @@ function addObject(type) {
             const pl = new THREE.PointLight(0xfff5e6, 1, 20);
             pl.castShadow = true;
             mesh.add(pl);
+            mesh.userData.lightSource = pl;
             break;
         }
         case 'character': {
@@ -790,25 +888,52 @@ function selectObject(obj) {
     // TransformControls：先 detach 旧对象
     if (transformControl) transformControl.detach();
 
-    // 清除旧选中高亮
+    // 清除旧选中高亮（支持 Group 和 Mesh）
     if (selectedObj) {
-        if (selectedObj.material && selectedObj.material.emissive) {
-            selectedObj.material.emissive.setHex(selectedObj.userData.oldEmissive || 0);
-        }
+        clearHighlight(selectedObj);
     }
     selectedObj = obj;
 
-    // TransformControls：attach 新对象（相机对象除外）
-    if (transformControl && obj && !obj.userData.isCameraObj) {
+    // TransformControls：attach 新对象（所有对象都支持）
+    if (transformControl && obj) {
         transformControl.attach(obj);
     }
 
-    if (obj && obj.material && obj.material.emissive) {
-        obj.userData.oldEmissive = obj.material.emissive.getHex();
-        obj.material.emissive.setHex(0x333300);
+    // 设置新选中高亮（支持 Group 和 Mesh）
+    if (obj) {
+        setHighlight(obj, 0x333300);
     }
     updatePropsPanel();
     updateObjectTree();
+}
+
+// 高亮辅助函数：支持 Group（遍历子 Mesh）和 Mesh
+function setHighlight(obj, color) {
+    if (obj.isMesh && obj.material && obj.material.emissive) {
+        if (obj.userData.oldEmissive === undefined) obj.userData.oldEmissive = obj.material.emissive.getHex();
+        obj.material.emissive.setHex(color);
+    }
+    if (obj.isGroup) {
+        obj.traverse(child => {
+            if (child.isMesh && child.material && child.material.emissive) {
+                if (child.userData.oldEmissive === undefined) child.userData.oldEmissive = child.material.emissive.getHex();
+                child.material.emissive.setHex(color);
+            }
+        });
+    }
+}
+
+function clearHighlight(obj) {
+    if (obj.isMesh && obj.material && obj.material.emissive) {
+        obj.material.emissive.setHex(obj.userData.oldEmissive || 0);
+    }
+    if (obj.isGroup) {
+        obj.traverse(child => {
+            if (child.isMesh && child.material && child.material.emissive) {
+                child.material.emissive.setHex(child.userData.oldEmissive || 0);
+            }
+        });
+    }
 }
 
 function deleteSelected() {
@@ -880,17 +1005,46 @@ function onTreeClick(e, uuid) {
 
 // ============ 属性面板 ============
 function updatePropsPanel() {
-    const pc = document.getElementById('props-content');
+    const overlay = document.getElementById('props-overlay');
+    const defaultPanel = document.getElementById('props-default');
+    const cameraPanel = document.getElementById('props-camera-panel');
+    const lightPanel = document.getElementById('props-light-panel');
+    const transformGroup = document.getElementById('transform-group');
+
+    // 全部隐藏
+    overlay.style.display = 'none';
+    defaultPanel.style.display = 'none';
+    cameraPanel.style.display = 'none';
+    lightPanel.style.display = 'none';
+
     if (!selectedObj) {
-        pc.innerHTML = '<div style="padding:20px 12px;font-size:11px;color:var(--muted);text-align:center;">选中对象以编辑属性</div>';
+        overlay.style.display = 'block';
+        defaultPanel.style.display = 'block';
+        transformGroup.style.display = 'none';
         return;
     }
-    // 相机对象：显示相机参数面板
+
+    // 相机对象
     if (selectedObj.userData && selectedObj.userData.isCameraObj) {
+        defaultPanel.style.display = 'block';
+        transformGroup.style.display = 'none';
+        cameraPanel.style.display = 'block';
         renderCameraProps(selectedObj);
         return;
     }
-    // 普通对象：显示变换属性
+
+    // 灯光对象
+    if (selectedObj.userData && selectedObj.userData.type === 'light') {
+        defaultPanel.style.display = 'block';
+        transformGroup.style.display = 'none';
+        lightPanel.style.display = 'block';
+        renderLightProps(selectedObj);
+        return;
+    }
+
+    // 普通对象：显示默认面板 + 变换属性
+    defaultPanel.style.display = 'block';
+    transformGroup.style.display = 'block';
     const p = selectedObj.position;
     const r = selectedObj.rotation;
     const s = selectedObj.scale;
@@ -907,57 +1061,14 @@ function updatePropsPanel() {
 
 function renderCameraProps(camObj) {
     const d = camObj.userData;
-    const pc = document.getElementById('props-content');
-    pc.innerHTML = `
-        <div class="prop-group">
-            <div class="prop-label">📷 相机参数</div>
-        </div>
-        <div class="prop-group">
-            <div class="prop-row">
-                <label class="prop-label">FOV</label>
-                <input class="prop-input" type="number" id="cam-fov" value="${d.fov}" min="10" max="120" oninput="applyCameraProps()" style="width:70px;">
-                <span class="prop-unit">°</span>
-            </div>
-            <div class="prop-row">
-                <label class="prop-label">Near</label>
-                <input class="prop-input" type="number" id="cam-near" value="${d.near}" min="0.01" max="100" step="0.1" oninput="applyCameraProps()" style="width:70px;">
-            </div>
-            <div class="prop-row">
-                <label class="prop-label">Far</label>
-                <input class="prop-input" type="number" id="cam-far" value="${d.far}" min="10" max="10000" step="10" oninput="applyCameraProps()" style="width:70px;">
-            </div>
-            <div class="prop-row">
-                <label class="prop-label">焦距</label>
-                <input class="prop-input" type="number" id="cam-focal" value="${d.focalLength}" min="10" max="200" step="1" oninput="applyCameraProps()" style="width:70px;">
-                <span class="prop-unit">mm</span>
-            </div>
-        </div>
-        <div class="prop-group">
-            <button class="prop-btn" onclick="snapToCamera('${camObj.uuid}')" style="width:100%;padding:6px 0;border-radius:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;">
-                📷 设为当前相机
-            </button>
-        </div>
-        <div class="prop-group">
-            <div class="prop-label">变换</div>
-            <div class="prop-row">
-                <label class="prop-label">位置 X</label>
-                <input class="prop-input" type="number" id="cam-px" value="${camObj.position.x.toFixed(2)}" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
-            </div>
-            <div class="prop-row">
-                <label class="prop-label">位置 Y</label>
-                <input class="prop-input" type="number" id="cam-py" value="${camObj.position.y.toFixed(2)}" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
-            </div>
-            <div class="prop-row">
-                <label class="prop-label">位置 Z</label>
-                <input class="prop-input" type="number" id="cam-pz" value="${camObj.position.z.toFixed(2)}" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
-            </div>
-            <div class="prop-row">
-                <label class="prop-label">旋转 Y</label>
-                <input class="prop-input" type="number" id="cam-ry" value="${THREE.MathUtils.radToDeg(camObj.rotation.y).toFixed(0)}" step="1" oninput="applyCameraTransform()" style="width:65px;">
-                <span class="prop-unit">°</span>
-            </div>
-        </div>
-    `;
+    document.getElementById('cam-fov').value = d.fov;
+    document.getElementById('cam-near').value = d.near;
+    document.getElementById('cam-far').value = d.far;
+    document.getElementById('cam-focal').value = d.focalLength;
+    document.getElementById('cam-px').value = camObj.position.x.toFixed(2);
+    document.getElementById('cam-py').value = camObj.position.y.toFixed(2);
+    document.getElementById('cam-pz').value = camObj.position.z.toFixed(2);
+    document.getElementById('cam-ry').value = THREE.MathUtils.radToDeg(camObj.rotation.y).toFixed(0);
 }
 
 function syncCameraPropsToPanel(camObj) {
@@ -996,10 +1107,47 @@ function applyCameraTransform() {
     selectedObj.rotation.set(0, ry, 0);
 }
 
+// ============ 灯光对象控制 ============
+function renderLightProps(lightObj) {
+    const light = lightObj.userData.lightSource;
+    if (!light) return;
+    document.getElementById('light-intensity').value = Math.round(light.intensity * 100);
+    document.getElementById('light-intensity-val').textContent = light.intensity.toFixed(1);
+    document.getElementById('light-color-obj').value = '#' + light.color.getHexString();
+    document.getElementById('light-distance').value = light.distance.toFixed(1);
+    document.getElementById('light-decay').value = light.decay.toFixed(1);
+    document.getElementById('light-px').value = lightObj.position.x.toFixed(2);
+    document.getElementById('light-py').value = lightObj.position.y.toFixed(2);
+    document.getElementById('light-pz').value = lightObj.position.z.toFixed(2);
+}
+
+function applyLightProps() {
+    if (!selectedObj || selectedObj.userData.type !== 'light') return;
+    const light = selectedObj.userData.lightSource;
+    if (!light) return;
+    light.intensity = parseFloat(document.getElementById('light-intensity').value) / 100;
+    document.getElementById('light-intensity-val').textContent = light.intensity.toFixed(1);
+    light.color.set(document.getElementById('light-color-obj').value);
+    light.distance = parseFloat(document.getElementById('light-distance').value) || 10;
+    light.decay = parseFloat(document.getElementById('light-decay').value) || 2;
+}
+
+function applyLightTransform() {
+    if (!selectedObj || selectedObj.userData.type !== 'light') return;
+    const px = parseFloat(document.getElementById('light-px').value) || 0;
+    const py = parseFloat(document.getElementById('light-py').value) || 0;
+    const pz = parseFloat(document.getElementById('light-pz').value) || 0;
+    selectedObj.position.set(px, py, pz);
+}
+
 function snapToCamera(uuid) {
     // 将视口相机切换到该相机对象的角度和位置
     const camObj = objects.find(o => o.uuid === uuid) || cameraObjects.find(o => o.uuid === uuid);
     if (!camObj) return;
+
+    // 隐藏所有相机可视化对象，避免遮挡画面
+    cameraObjects.forEach(c => c.visible = false);
+
     const d = camObj.userData;
     // 计算相机参数
     camera.fov = d.fov;
@@ -1017,7 +1165,7 @@ function snapToCamera(uuid) {
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(worldQuat);
     controls.target.copy(worldPos).add(fwd.multiplyScalar(5));
     controls.update();
-    showToast('已切换到相机: ' + camObj.name);
+    showToast('已切换到相机: ' + camObj.name + '（相机可视化已隐藏）');
 }
 
 function updateTransform() {
@@ -1038,8 +1186,8 @@ function updateTransform() {
     selectedObj.rotation.set(rx, ry, rz);
     selectedObj.scale.set(sx, sy, sz);
 
-    // 重新 attach Gizmo
-    if (transformControl && selectedObj && !selectedObj.userData.isCameraObj) {
+    // 重新 attach Gizmo（所有对象都支持）
+    if (transformControl && selectedObj) {
         transformControl.attach(selectedObj);
     }
 }
@@ -1103,7 +1251,11 @@ function updateCameraPreview() {
     camObj.getWorldPosition(pipCamera.position);
     camObj.getWorldQuaternion(pipCamera.quaternion);
     document.getElementById('pip-label').textContent = '📷 ' + (camObj.name || '相机');
+
+    // 渲染 PIP 时临时隐藏相机可视化，避免相机拍到自身
+    cameraObjects.forEach(c => c.visible = false);
     pipRenderer.render(scene, pipCamera);
+    cameraObjects.forEach(c => c.visible = true);
 }
 
 // ============ 变换模式切换 ============
@@ -1126,7 +1278,7 @@ function updatePropsFromObject() {
     const p = selectedObj.position;
     const r = selectedObj.rotation;
     const s = selectedObj.scale;
-    // 普通对象或相机对象的位置/旋转/缩放输入
+    // 普通对象的位置/旋转/缩放输入
     const pxEl = document.getElementById('inp-px');
     if (pxEl) {
         document.getElementById('inp-px').value = p.x.toFixed(2);
@@ -1139,9 +1291,16 @@ function updatePropsFromObject() {
         document.getElementById('inp-sy').value = s.y.toFixed(2);
         document.getElementById('inp-sz').value = s.z.toFixed(2);
     }
-    // 如果是相机对象，同步相机参数
+    // 相机对象同步相机参数
     if (selectedObj.userData && selectedObj.userData.isCameraObj) {
         syncCameraPropsToPanel(selectedObj);
+    }
+    // 灯光对象同步灯光参数
+    if (selectedObj.userData && selectedObj.userData.type === 'light') {
+        const lightPanel = document.getElementById('props-light-panel');
+        if (lightPanel && lightPanel.style.display !== 'none') {
+            renderLightProps(selectedObj);
+        }
     }
 }
 
@@ -1175,6 +1334,8 @@ function setView(type) {
 
 function resetCamera() {
     controls.reset();
+    // 恢复所有相机可视化对象显示
+    cameraObjects.forEach(c => c.visible = true);
     camera.position.set(10, 8, 10);
     controls.target.set(0, 0, 0);
     controls.update();
