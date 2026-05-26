@@ -370,23 +370,23 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
                 <div class="prop-label">变换</div>
                 <div class="prop-row">
                     <span class="bottom-label" style="width:14px">X</span>
-                    <input type="number" class="prop-input" id="inp-px" value="0" step="0.1" onchange="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-px" value="0" step="0.1" oninput="updateTransform()">
                     <span class="bottom-label" style="width:14px">Y</span>
-                    <input type="number" class="prop-input" id="inp-py" value="0" step="0.1" onchange="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-py" value="0" step="0.1" oninput="updateTransform()">
                     <span class="bottom-label" style="width:14px">Z</span>
-                    <input type="number" class="prop-input" id="inp-pz" value="0" step="0.1" onchange="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-pz" value="0" step="0.1" oninput="updateTransform()">
                 </div>
                 <div class="prop-row">
                     <span class="bottom-label" style="width:28px">旋转</span>
-                    <input type="number" class="prop-input" id="inp-rx" value="0" step="1" onchange="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-ry" value="0" step="1" onchange="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-rz" value="0" step="1" onchange="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-rx" value="0" step="1" oninput="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-ry" value="0" step="1" oninput="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-rz" value="0" step="1" oninput="updateTransform()">
                 </div>
                 <div class="prop-row">
                     <span class="bottom-label" style="width:28px">缩放</span>
-                    <input type="number" class="prop-input" id="inp-sx" value="1" step="0.1" min="0.01" onchange="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-sy" value="1" step="0.1" min="0.01" onchange="updateTransform()">
-                    <input type="number" class="prop-input" id="inp-sz" value="1" step="0.1" min="0.01" onchange="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-sx" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-sy" value="1" step="0.1" min="0.01" oninput="updateTransform()">
+                    <input type="number" class="prop-input" id="inp-sz" value="1" step="0.1" min="0.01" oninput="updateTransform()">
                 </div>
             </div>
             <div class="prop-group">
@@ -775,7 +775,10 @@ function addObject(type) {
     // 保留 case 里已设置的 userData（如相机的 isCameraObj），只补充 type 和 id
     mesh.userData = { ...mesh.userData, type, id: Date.now() };
     scene.add(mesh);
-    objects.push(mesh);
+    // 相机对象只加入 cameraObjects，不加入 objects（避免重复）
+    if (type !== 'camera') {
+        objects.push(mesh);
+    }
     updateObjectTree();
     selectObject(mesh);
     // 关闭添加菜单，防止重复添加
@@ -825,10 +828,21 @@ function deleteSelected() {
 
 function clearScene() {
     if (!confirm('确定清空所有对象？')) return;
-    objects.forEach(o => scene.remove(o));
+    // 移除普通对象
+    objects.forEach(o => {
+        if (o.parent) o.parent.remove(o);
+        else scene.remove(o);
+    });
+    // 移除相机对象
+    cameraObjects.forEach(c => {
+        if (c.parent) c.parent.remove(c);
+        else scene.remove(c);
+    });
     objects = [];
+    cameraObjects = [];
     selectedObj = null;
-    // 保留灯光、网格、地面
+    // 重置背景为默认颜色
+    scene.background = new THREE.Color(0x050508);
     updateObjectTree();
     updatePropsPanel();
     showToast('场景已清空');
@@ -901,20 +915,20 @@ function renderCameraProps(camObj) {
         <div class="prop-group">
             <div class="prop-row">
                 <label class="prop-label">FOV</label>
-                <input class="prop-input" type="number" id="cam-fov" value="${d.fov}" min="10" max="120" onchange="applyCameraProps()" style="width:70px;">
+                <input class="prop-input" type="number" id="cam-fov" value="${d.fov}" min="10" max="120" oninput="applyCameraProps()" style="width:70px;">
                 <span class="prop-unit">°</span>
             </div>
             <div class="prop-row">
                 <label class="prop-label">Near</label>
-                <input class="prop-input" type="number" id="cam-near" value="${d.near}" min="0.01" max="100" step="0.1" onchange="applyCameraProps()" style="width:70px;">
+                <input class="prop-input" type="number" id="cam-near" value="${d.near}" min="0.01" max="100" step="0.1" oninput="applyCameraProps()" style="width:70px;">
             </div>
             <div class="prop-row">
                 <label class="prop-label">Far</label>
-                <input class="prop-input" type="number" id="cam-far" value="${d.far}" min="10" max="10000" step="10" onchange="applyCameraProps()" style="width:70px;">
+                <input class="prop-input" type="number" id="cam-far" value="${d.far}" min="10" max="10000" step="10" oninput="applyCameraProps()" style="width:70px;">
             </div>
             <div class="prop-row">
                 <label class="prop-label">焦距</label>
-                <input class="prop-input" type="number" id="cam-focal" value="${d.focalLength}" min="10" max="200" step="1" onchange="applyCameraProps()" style="width:70px;">
+                <input class="prop-input" type="number" id="cam-focal" value="${d.focalLength}" min="10" max="200" step="1" oninput="applyCameraProps()" style="width:70px;">
                 <span class="prop-unit">mm</span>
             </div>
         </div>
@@ -927,19 +941,19 @@ function renderCameraProps(camObj) {
             <div class="prop-label">变换</div>
             <div class="prop-row">
                 <label class="prop-label">位置 X</label>
-                <input class="prop-input" type="number" id="cam-px" value="${camObj.position.x.toFixed(2)}" step="0.1" onchange="applyCameraTransform()" style="width:65px;">
+                <input class="prop-input" type="number" id="cam-px" value="${camObj.position.x.toFixed(2)}" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
             </div>
             <div class="prop-row">
                 <label class="prop-label">位置 Y</label>
-                <input class="prop-input" type="number" id="cam-py" value="${camObj.position.y.toFixed(2)}" step="0.1" onchange="applyCameraTransform()" style="width:65px;">
+                <input class="prop-input" type="number" id="cam-py" value="${camObj.position.y.toFixed(2)}" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
             </div>
             <div class="prop-row">
                 <label class="prop-label">位置 Z</label>
-                <input class="prop-input" type="number" id="cam-pz" value="${camObj.position.z.toFixed(2)}" step="0.1" onchange="applyCameraTransform()" style="width:65px;">
+                <input class="prop-input" type="number" id="cam-pz" value="${camObj.position.z.toFixed(2)}" step="0.1" oninput="applyCameraTransform()" style="width:65px;">
             </div>
             <div class="prop-row">
                 <label class="prop-label">旋转 Y</label>
-                <input class="prop-input" type="number" id="cam-ry" value="${THREE.MathUtils.radToDeg(camObj.rotation.y).toFixed(0)}" step="1" onchange="applyCameraTransform()" style="width:65px;">
+                <input class="prop-input" type="number" id="cam-ry" value="${THREE.MathUtils.radToDeg(camObj.rotation.y).toFixed(0)}" step="1" oninput="applyCameraTransform()" style="width:65px;">
                 <span class="prop-unit">°</span>
             </div>
         </div>
@@ -1229,6 +1243,9 @@ function updateAmbient(val) {
 async function takeScreenshot() {
     showToast('正在截图...');
     try {
+        // 截图前隐藏相机可视化对象（不在画面中显示）
+        cameraObjects.forEach(c => c.visible = false);
+
         const w = currentRes.w;
         const h = currentRes.h;
 
@@ -1243,6 +1260,8 @@ async function takeScreenshot() {
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
         renderer.render(scene, camera);
+        // 恢复相机可视化对象（不在截图中显示）
+        cameraObjects.forEach(c => c.visible = true);
 
         // 获取 dataURL 通过 postMessage 传回画布（iframe 通信）
         const dataURL = renderer.domElement.toDataURL('image/png');
@@ -1267,6 +1286,8 @@ async function takeScreenshot() {
             }
         }, 'image/png');
     } catch (e) {
+        // 出错也要恢复相机可视化对象
+        cameraObjects.forEach(c => c.visible = true);
         console.error('截图错误:', e);
         showToast('截图失败: ' + e.message);
     }
@@ -1367,10 +1388,15 @@ function uploadModel() {
         if (file.name.endsWith('.glb') || file.name.endsWith('.gltf')) {
             const loader = new THREE.GLTFLoader();
             loader.load(url, (gltf) => {
-                scene.add(gltf.scene);
-                objects.push({ name: file.name, obj: gltf.scene });
+                const obj = gltf.scene;
+                obj.name = file.name.replace(/\.[^.]+$/, '');
+                obj.userData = { type: 'model', id: Date.now() };
+                obj.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+                scene.add(obj);
+                objects.push(obj);
                 updateObjectTree();
-                showToast('GLTF 模型已加载: ' + file.name);
+                selectObject(obj);
+                showToast('GLTF 模型已加载: ' + obj.name);
                 URL.revokeObjectURL(url);
             }, undefined, (err) => {
                 showToast('GLTF 加载失败: ' + err);
@@ -1392,9 +1418,13 @@ function uploadModel() {
                         const objLoader = new THREE.OBJLoader();
                         objLoader.setMaterials(materials);
                         objLoader.load(url, (obj) => {
+                            obj.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+                            obj.name = file.name.replace(/\.obj$/i, '');
+                            obj.userData = { type: 'model', id: Date.now() };
                             scene.add(obj);
-                            objects.push({ name: file.name, obj: obj });
+                            objects.push(obj);
                             updateObjectTree();
+                            selectObject(obj);
                             showToast('OBJ+MTL 模型已加载: ' + file.name);
                             URL.revokeObjectURL(url);
                             URL.revokeObjectURL(mtlUrl);
@@ -1406,9 +1436,13 @@ function uploadModel() {
                         // MTL 加载失败，继续加载 OBJ
                         const objLoader = new THREE.OBJLoader();
                         objLoader.load(url, (obj) => {
+                            obj.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+                            obj.name = file.name.replace(/\.obj$/i, '');
+                            obj.userData = { type: 'model', id: Date.now() };
                             scene.add(obj);
-                            objects.push({ name: file.name, obj: obj });
+                            objects.push(obj);
                             updateObjectTree();
+                            selectObject(obj);
                             showToast('OBJ 模型已加载（无材质）: ' + file.name);
                             URL.revokeObjectURL(url);
                         });
@@ -1564,18 +1598,19 @@ document.addEventListener('click', (e) => {
 
 // ============ 画布点击选中 ============
 function onCanvasClick(e) {
-    // 简化射线检测
     const rect = renderer.domElement.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(x, y), camera);
-    const hits = ray.intersectObjects(objects, true);
+    // 合并 objects 和 cameraObjects 一起检测
+    const allObjs = [...objects, ...cameraObjects];
+    const hits = ray.intersectObjects(allObjs, true);
     if (hits.length > 0) {
         let obj = hits[0].object;
-        // 找到顶层用户对象
-        while (obj.parent && !objects.includes(obj)) obj = obj.parent;
-        if (objects.includes(obj)) selectObject(obj);
+        // 找到顶层用户对象（在 allObjs 中）
+        while (obj.parent && !allObjs.includes(obj)) obj = obj.parent;
+        if (allObjs.includes(obj)) selectObject(obj);
     }
     // 点空白处不再取消选中，避免属性面板消失
     // 如需取消选中，按 Escape 键
