@@ -175,6 +175,28 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
 }
 .prop-value { font-size:10px; font-weight:700; color:var(--muted); min-width:32px; text-align:right; }
 
+/* 灯光参数面板 */
+.prop-color {
+    width:24px; height:24px; border-radius:4px; border:1px solid var(--divider);
+    background:transparent; cursor:pointer; padding:0;
+}
+.prop-checkbox { width:16px; height:16px; cursor:pointer; }
+
+/* 相机预览 PIP */
+.camera-pip {
+    position:absolute; bottom:60px; right:16px; width:240px; height:135px;
+    border:2px solid var(--accent); border-radius:8px; overflow:hidden;
+    background:#000; z-index:50; box-shadow:0 4px 20px rgba(0,0,0,.6);
+    display:none;
+}
+.camera-pip.show { display:block; }
+.camera-pip canvas { width:100%; height:100%; }
+.camera-pip-label {
+    position:absolute; top:4px; left:6px; font-size:9px; font-weight:700;
+    color:#fff; background:rgba(0,0,0,.55); padding:2px 6px; border-radius:4px;
+    pointer-events:none;
+}
+
 /* 拖放覆盖层 */
 .drop-overlay {
     position:fixed; inset:0; z-index:1000; background:rgba(108,92,231,.12);
@@ -311,6 +333,12 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
             <button class="bottom-btn" id="btn-res" onclick="toggleResMenu()" title="分辨率">📐</button>
         </div>
 
+        <!-- 相机预览 PIP -->
+        <div class="camera-pip" id="camera-pip">
+            <div class="camera-pip-label" id="pip-label">相机预览</div>
+            <canvas id="pip-canvas"></canvas>
+        </div>
+
         <!-- 分辨率选择器 -->
         <div class="res-selector" id="res-selector">
             <button class="res-opt" data-w="1920" data-h="1080" onclick="selectRes(this)">1080P</button>
@@ -362,11 +390,30 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
                 </div>
             </div>
             <div class="prop-group">
-                <div class="prop-label">场景</div>
+                <div class="prop-label">场景灯光</div>
                 <div class="prop-row">
-                    <span class="bottom-label" style="width:50px">环境光</span>
+                    <label class="prop-label" style="width:50px">环境光</label>
                     <input type="range" class="prop-slider" id="slider-ambient" min="0" max="100" value="40" oninput="updateAmbient(this.value)">
                     <span class="prop-value" id="val-ambient">40%</span>
+                </div>
+                <div class="prop-row">
+                    <label class="prop-label" style="width:50px">方向光</label>
+                    <input type="range" class="prop-slider" id="slider-dir" min="0" max="200" value="120" oninput="updateDirLight(this.value)">
+                    <span class="prop-value" id="val-dir">1.2</span>
+                </div>
+                <div class="prop-row">
+                    <label class="prop-label" style="width:50px">补光</label>
+                    <input type="range" class="prop-slider" id="slider-fill" min="0" max="100" value="30" oninput="updateFillLight(this.value)">
+                    <span class="prop-value" id="val-fill">0.3</span>
+                </div>
+                <div class="prop-row">
+                    <label class="prop-label" style="width:50px">色温</label>
+                    <input type="color" class="prop-color" id="light-color" value="#fff5e6" onchange="updateLightColor(this.value)" title="方向光颜色">
+                </div>
+                <div class="prop-row">
+                    <label class="prop-label" style="width:50px">阴影</label>
+                    <input type="checkbox" class="prop-checkbox" id="chk-shadow" checked onchange="toggleShadow(this.checked)" title="投射阴影">
+                    <span class="prop-unit" style="font-size:10px">开启</span>
                 </div>
             </div>
         </div>
@@ -501,6 +548,9 @@ function init() {
     // 默认不贴附任何对象
     transformControl.detach();
 
+    // 相机预览 PIP
+    initPip();
+
     // 事件
     window.addEventListener('resize', onResize);
     canvas.addEventListener('click', onCanvasClick);
@@ -538,6 +588,9 @@ function animate(time) {
         lastTime = time;
         document.getElementById('fps-badge').textContent = fps + ' FPS';
     }
+
+    // 相机预览 PIP
+    updateCameraPreview();
 
     renderer.render(scene, camera);
 }
@@ -902,7 +955,9 @@ function snapToCamera(uuid) {
 
 function updateTransform() {
     if (!selectedObj) return;
-    // 相机对象：只更新变换，不更新 FOV 等参数
+    // 断开 Gizmo，避免 objectChange 事件覆盖手动输入的值
+    if (transformControl) transformControl.detach();
+
     const px = parseFloat(document.getElementById('inp-px').value) || 0;
     const py = parseFloat(document.getElementById('inp-py').value) || 0;
     const pz = parseFloat(document.getElementById('inp-pz').value) || 0;
@@ -915,6 +970,73 @@ function updateTransform() {
     selectedObj.position.set(px, py, pz);
     selectedObj.rotation.set(rx, ry, rz);
     selectedObj.scale.set(sx, sy, sz);
+
+    // 重新 attach Gizmo
+    if (transformControl && selectedObj && !selectedObj.userData.isCameraObj) {
+        transformControl.attach(selectedObj);
+    }
+}
+
+// ============ 灯光控制 ============
+function updateDirLight(val) {
+    const v = parseInt(val) / 100;
+    const l = scene.getObjectByName('main_light');
+    if (l) l.intensity = v;
+    document.getElementById('val-dir').textContent = v.toFixed(1);
+}
+
+function updateFillLight(val) {
+    const v = parseInt(val) / 100;
+    const l = scene.getObjectByName('fill_light');
+    if (l) l.intensity = v;
+    document.getElementById('val-fill').textContent = v.toFixed(1);
+}
+
+function updateLightColor(hex) {
+    const l = scene.getObjectByName('main_light');
+    if (l) l.color.set(hex);
+}
+
+function toggleShadow(on) {
+    const l = scene.getObjectByName('main_light');
+    if (l) l.castShadow = on;
+    // 同时更新地面接收阴影
+    const ground = scene.getObjectByName('ground');
+    if (ground) ground.receiveShadow = on;
+}
+
+// ============ 相机预览 PIP ============
+let pipRenderer = null;
+let pipCamera = null;
+
+function initPip() {
+    const pipCanvas = document.getElementById('pip-canvas');
+    if (!pipCanvas) return;
+    pipRenderer = new THREE.WebGLRenderer({ canvas: pipCanvas, antialias:true, alpha:false });
+    pipRenderer.setSize(240, 135);
+    pipRenderer.setPixelRatio(1);
+    pipRenderer.shadowMap.enabled = true;
+    pipRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    pipCamera = new THREE.PerspectiveCamera(50, 240/135, 0.1, 1000);
+}
+
+function updateCameraPreview() {
+    if (!pipRenderer || !pipCamera) return;
+    if (cameraObjects.length === 0) {
+        document.getElementById('camera-pip').classList.remove('show');
+        return;
+    }
+    document.getElementById('camera-pip').classList.add('show');
+    const camObj = cameraObjects[0];
+    const d = camObj.userData || {};
+    pipCamera.fov = d.fov || 50;
+    pipCamera.near = d.near || 0.1;
+    pipCamera.far = d.far || 1000;
+    pipCamera.updateProjectionMatrix();
+    camObj.getWorldPosition(pipCamera.position);
+    camObj.getWorldQuaternion(pipCamera.quaternion);
+    document.getElementById('pip-label').textContent = '📷 ' + (camObj.name || '相机');
+    pipRenderer.render(scene, pipCamera);
 }
 
 // ============ 变换模式切换 ============
@@ -1157,13 +1279,17 @@ function uploadBgImage() {
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
-            new THREE.TextureLoader().load(e.target.result, (tex) => {
+            const img = new Image();
+            img.onload = () => {
+                const tex = new THREE.Texture(img);
+                tex.needsUpdate = true;
                 tex.minFilter = THREE.LinearFilter;
+                tex.magFilter = THREE.LinearFilter;
                 scene.background = tex;
                 showToast('背景图已设置: ' + file.name);
-            }, undefined, () => {
-                showToast('背景图加载失败');
-            });
+            };
+            img.onerror = () => showToast('背景图解码失败');
+            img.src = e.target.result;
         };
         reader.readAsDataURL(file);
     };
