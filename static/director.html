@@ -834,22 +834,109 @@ function addObject(type) {
             break;
         }
         case 'character': {
-            // 虚拟人物占位：用胶囊体 + 小球代表头
-            const group = new THREE.Group();
-            const bodyGeo = new THREE.CapsuleGeometry(0.2, 0.8, 16, 32);
-            const bodyMat = new THREE.MeshStandardMaterial({ color, roughness:0.6, metalness:0.2 });
-            const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.y = 0.7;
-            body.castShadow = true;
-            group.add(body);
-            const headGeo = new THREE.SphereGeometry(0.18, 16, 16);
-            const headMat = new THREE.MeshStandardMaterial({ color, roughness:0.5, metalness:0.2 });
-            const head = new THREE.Mesh(headGeo, headMat);
-            head.position.y = 1.4;
-            head.castShadow = true;
-            group.add(head);
-            mesh = group;
+            // ===== 层级绑定人形角色（参考截图风格：球头+蓝身+白关节环）=====
+            const human = new THREE.Group();
+            const bodyColor = 0x7aa4c8;   // 浅蓝色躯干/四肢
+            const headColor = 0xf0f0f0;   // 白色头部
+            const jointColor = 0xffffff;  // 白色关节
+            const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.5, metalness: 0.1 });
+            const headMat = new THREE.MeshStandardMaterial({ color: headColor, roughness: 0.3, metalness: 0.1 });
+            const jointMat = new THREE.MeshStandardMaterial({ color: jointColor, roughness: 0.4, metalness: 0.3 });
+
+            function makePart(name, geo, mat, pos, parent) {
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.name = name;
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                if (pos) mesh.position.set(pos.x || 0, pos.y || 0, pos.z || 0);
+                mesh.userData.isHumanPart = true;
+                if (parent) parent.add(mesh);
+                return mesh;
+            }
+            function makeJoint(name, pos, parent) {
+                const joint = new THREE.Object3D();
+                joint.name = name;
+                if (pos) joint.position.set(pos.x || 0, pos.y || 0, pos.z || 0);
+                joint.userData.isHumanJoint = true;
+                if (parent) parent.add(joint);
+                return joint;
+            }
+            function makeRing(name, r, parent, pos) {
+                const ring = new THREE.Mesh(
+                    new THREE.TorusGeometry(r, r * 0.35, 8, 16),
+                    jointMat
+                );
+                ring.name = name;
+                ring.userData.isHumanPart = true;
+                if (pos) ring.position.set(pos.x || 0, pos.y || 0, pos.z || 0);
+                ring.rotation.y = Math.PI / 2;
+                if (parent) parent.add(ring);
+                return ring;
+            }
+
+            // === 躯干（蓝色胶囊体）===
+            const torso = makePart('躯干', new THREE.CapsuleGeometry(0.18, 0.6, 8, 16), bodyMat, {y: 0.6}, human);
+
+            // === 头部（白色球体 + 面部特征）===
+            const head = makePart('头部', new THREE.SphereGeometry(0.16, 16, 16), headMat, {y: 0.55}, torso);
+            const eyeGeo = new THREE.SphereGeometry(0.02, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+            const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeL.position.set(-0.05, 0.02, 0.14);
+            head.add(eyeL);
+            const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeR.position.set(0.05, 0.02, 0.14);
+            head.add(eyeR);
+            const mouthGeo = new THREE.BoxGeometry(0.05, 0.01, 0.01);
+            const mouthMat = new THREE.MeshBasicMaterial({ color: 0x555555 });
+            const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+            mouth.position.set(0, -0.04, 0.14);
+            head.add(mouth);
+
+            // === 左臂 ===
+            const shoulderL = makeJoint('左肩', {x: -0.22, y: 0.22}, torso);
+            makeRing('左肩环', 0.065, shoulderL);
+            const upperArmL = makePart('左上臂', new THREE.CylinderGeometry(0.045, 0.04, 0.35, 8), bodyMat, {y: -0.175}, shoulderL);
+            const elbowL = makeJoint('左肘', {y: -0.175}, upperArmL);
+            makeRing('左肘环', 0.055, elbowL);
+            const lowerArmL = makePart('左下臂', new THREE.CylinderGeometry(0.04, 0.035, 0.32, 8), bodyMat, {y: -0.16}, elbowL);
+            // 左手（方块状）
+            const handL = makePart('左手', new THREE.BoxGeometry(0.06, 0.07, 0.06), bodyMat, {y: -0.2}, lowerArmL);
+
+            // === 右臂 ===
+            const shoulderR = makeJoint('右肩', {x: 0.22, y: 0.22}, torso);
+            makeRing('右肩环', 0.065, shoulderR);
+            const upperArmR = makePart('右上臂', new THREE.CylinderGeometry(0.045, 0.04, 0.35, 8), bodyMat, {y: -0.175}, shoulderR);
+            const elbowR = makeJoint('右肘', {y: -0.175}, upperArmR);
+            makeRing('右肘环', 0.055, elbowR);
+            const lowerArmR = makePart('右下臂', new THREE.CylinderGeometry(0.04, 0.035, 0.32, 8), bodyMat, {y: -0.16}, elbowR);
+            // 右手（方块状）
+            const handR = makePart('右手', new THREE.BoxGeometry(0.06, 0.07, 0.06), bodyMat, {y: -0.2}, lowerArmR);
+
+            // === 左腿 ===
+            const hipL = makeJoint('左髋', {x: -0.1, y: -0.38}, torso);
+            makeRing('左髋环', 0.07, hipL);
+            const upperLegL = makePart('左大腿', new THREE.CylinderGeometry(0.055, 0.045, 0.42, 8), bodyMat, {y: -0.21}, hipL);
+            const kneeL = makeJoint('左膝', {y: -0.21}, upperLegL);
+            makeRing('左膝环', 0.06, kneeL);
+            const lowerLegL = makePart('左小腿', new THREE.CylinderGeometry(0.045, 0.04, 0.4, 8), bodyMat, {y: -0.2}, kneeL);
+            // 左脚
+            const footL = makePart('左脚', new THREE.BoxGeometry(0.08, 0.04, 0.12), bodyMat, {y: -0.22, z: 0.02}, lowerLegL);
+
+            // === 右腿 ===
+            const hipR = makeJoint('右髋', {x: 0.1, y: -0.38}, torso);
+            makeRing('右髋环', 0.07, hipR);
+            const upperLegR = makePart('右大腿', new THREE.CylinderGeometry(0.055, 0.045, 0.42, 8), bodyMat, {y: -0.21}, hipR);
+            const kneeR = makeJoint('右膝', {y: -0.21}, upperLegR);
+            makeRing('右膝环', 0.06, kneeR);
+            const lowerLegR = makePart('右小腿', new THREE.CylinderGeometry(0.045, 0.04, 0.4, 8), bodyMat, {y: -0.2}, kneeR);
+            // 右脚
+            const footR = makePart('右脚', new THREE.BoxGeometry(0.08, 0.04, 0.12), bodyMat, {y: -0.22, z: 0.02}, lowerLegR);
+
+            mesh = human;
             mesh.name = '人物_' + (objects.length + 1);
+            mesh.userData.isHuman = true;
+            mesh.userData.humanRoot = true;
             break;
         }
         case 'prop': {
@@ -1004,13 +1091,24 @@ function clearHighlight(obj) {
 
 function deleteSelected() {
     if (!selectedObj) return;
-    scene.remove(selectedObj);
-    objects = objects.filter(o => o !== selectedObj);
+    let target = selectedObj;
+
+    // 如果选中的是人形子部位，找到人形总组进行删除
+    if (selectedObj.userData && (selectedObj.userData.isHumanPart || selectedObj.userData.isHumanJoint || selectedObj.userData.isHuman)) {
+        let node = selectedObj;
+        while (node && !(node.userData && node.userData.isHuman)) {
+            node = node.parent;
+        }
+        if (node) target = node;
+    }
+
+    scene.remove(target);
+    objects = objects.filter(o => o !== target);
     // 如果是相机对象，也从 cameraObjects 中移除
-    if (selectedObj.userData && selectedObj.userData.isCameraObj) {
-        cameraObjects = cameraObjects.filter(c => c !== selectedObj);
+    if (target.userData && target.userData.isCameraObj) {
+        cameraObjects = cameraObjects.filter(c => c !== target);
         // 如果删除的是锁定相机，解锁视图
-        if (lockedCamera === selectedObj) {
+        if (lockedCamera === target) {
             unlockCameraFromView();
         }
     }
@@ -1018,7 +1116,7 @@ function deleteSelected() {
     selectedObj = null;
     updateObjectTree();
     updatePropsPanel();
-    showToast('已删除对象');
+    showToast('已删除: ' + (target.name || '对象'));
 }
 
 function clearScene() {
@@ -1051,15 +1149,42 @@ function updateObjectTree() {
     // 合并 objects 和 cameraObjects
     const allObjects = [...objects, ...cameraObjects];
     let html = '';
-    allObjects.forEach(obj => {
+
+    function renderNode(obj, depth) {
         const isSel = selectedObj === obj;
-        const icon = getObjIcon(obj.userData && obj.userData.type ? obj.userData.type : 'prop');
+        const indent = depth * 14;
+        let icon;
+        if (obj.userData && obj.userData.isHumanPart) {
+            icon = '🦴';
+        } else if (obj.userData && obj.userData.isHumanJoint) {
+            icon = '⚙️';
+        } else {
+            icon = getObjIcon(obj.userData && obj.userData.type ? obj.userData.type : 'prop');
+        }
         const name = obj.name || '未命名';
-        html += `<div class="tree-item ${isSel ? 'selected' : ''}" onclick="onTreeClick(event, '${obj.uuid}')">
+        html += `<div class="tree-item ${isSel ? 'selected' : ''}" style="padding-left:${12 + indent}px;" onclick="onTreeClick(event, '${obj.uuid}')">
             <span class="tree-icon">${icon}</span>
             <span>${name}</span>
         </div>`;
-    });
+        // 递归渲染人形子节点
+        if (obj.userData && obj.userData.isHuman) {
+            obj.children.forEach(child => {
+                if (child.userData && (child.userData.isHumanPart || child.userData.isHumanJoint)) {
+                    renderNode(child, depth + 1);
+                }
+            });
+        }
+        // 如果子节点是人形部位，继续递归
+        if (obj.userData && (obj.userData.isHumanPart || obj.userData.isHumanJoint)) {
+            obj.children.forEach(child => {
+                if (child.userData && (child.userData.isHumanPart || child.userData.isHumanJoint)) {
+                    renderNode(child, depth + 1);
+                }
+            });
+        }
+    }
+
+    allObjects.forEach(obj => renderNode(obj, 0));
     tree.innerHTML = html || '<div style="padding:12px 8px;font-size:11px;color:var(--muted);text-align:center;">点击 ＋ 添加对象</div>';
     document.getElementById('obj-badge').textContent = allObjects.length + ' 对象';
 }
@@ -1070,8 +1195,24 @@ function getObjIcon(type) {
 }
 
 function onTreeClick(e, uuid) {
+    // 先在顶层对象中查找
     const allObjects = [...objects, ...cameraObjects];
-    const obj = allObjects.find(o => o.uuid === uuid);
+    let obj = allObjects.find(o => o.uuid === uuid);
+    // 如果找不到，在场景所有人形中递归查找子部位
+    if (!obj) {
+        function findInNode(node) {
+            if (node.uuid === uuid) return node;
+            for (const child of node.children) {
+                const found = findInNode(child);
+                if (found) return found;
+            }
+            return null;
+        }
+        for (const root of allObjects) {
+            obj = findInNode(root);
+            if (obj) break;
+        }
+    }
     if (obj) selectObject(obj);
 }
 
@@ -1912,9 +2053,15 @@ function onCanvasClick(e) {
     const hits = ray.intersectObjects(allObjs, true);
     if (hits.length > 0) {
         let obj = hits[0].object;
-        // 找到顶层用户对象（在 allObjs 中）
-        while (obj.parent && !allObjs.includes(obj)) obj = obj.parent;
-        if (allObjs.includes(obj)) selectObject(obj);
+        // 找到可选中的节点：allObjs 中的对象 或 人形部位
+        while (obj.parent) {
+            if (allObjs.includes(obj)) break;
+            if (obj.userData && (obj.userData.isHumanPart || obj.userData.isHumanJoint)) break;
+            obj = obj.parent;
+        }
+        if (allObjs.includes(obj) || (obj.userData && (obj.userData.isHumanPart || obj.userData.isHumanJoint))) {
+            selectObject(obj);
+        }
     }
     // 点空白处不再取消选中，避免属性面板消失
     // 如需取消选中，按 Escape 键
