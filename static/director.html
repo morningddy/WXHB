@@ -287,6 +287,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
         <div class="viewport-info">
             <span class="viewport-badge" id="fps-badge">-- FPS</span>
             <span class="viewport-badge" id="obj-badge">0 对象</span>
+            <span class="viewport-badge" id="lock-badge" style="display:none; color:var(--accent); border-color:var(--accent);">🔒 锁定</span>
         </div>
 
         <!-- 顶部工具栏 -->
@@ -456,6 +457,11 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
                     </button>
                 </div>
                 <div class="prop-group">
+                    <button class="prop-btn" id="btn-lock-cam" style="width:100%;padding:6px 0;border-radius:6px;background:var(--panel);color:var(--text);border:1px solid var(--divider);cursor:pointer;font-size:12px;" onclick="toggleLockCamera()">
+                        🔒 锁定到视图
+                    </button>
+                </div>
+                <div class="prop-group">
                     <div class="prop-label">变换</div>
                     <div class="prop-row">
                         <label class="prop-label">位置 X</label>
@@ -565,6 +571,7 @@ let ambientLight = null;
 let transformControl = null;
 let transformMode = 'translate';  // translate | rotate | scale
 let cameraObjects = [];       // 场景中的相机对象列表
+let lockedCamera = null;      // 锁定到视图的相机对象（Blender 的 Camera to View）
 
 // ============ 网格纹理生成 ============
 function createGridTexture() {
@@ -639,6 +646,14 @@ function init() {
     controls.dampingFactor = 0.08;
     controls.target.set(0, 0, 0);
     controls.update();
+
+    // 锁定相机到视图：OrbitControls 操作后同步到锁定相机
+    controls.addEventListener('change', () => {
+        if (lockedCamera) {
+            lockedCamera.position.copy(camera.position);
+            lockedCamera.quaternion.copy(camera.quaternion);
+        }
+    });
 
     // 灯光
     ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -739,6 +754,28 @@ function animate(time) {
     // 相机预览 PIP
     updateCameraPreview();
 
+    // 更新锁定状态指示
+    const lockBadge = document.getElementById('lock-badge');
+    if (lockBadge) {
+        if (lockedCamera) {
+            lockBadge.style.display = 'inline';
+            lockBadge.textContent = '🔒 ' + (lockedCamera.name || '相机');
+        } else {
+            lockBadge.style.display = 'none';
+        }
+    }
+
+    // 如果锁定了相机，按锁定相机的参数显示画面
+    if (lockedCamera) {
+        const d = lockedCamera.userData;
+        if (camera.fov !== d.fov || camera.near !== d.near || camera.far !== d.far) {
+            camera.fov = d.fov;
+            camera.near = d.near;
+            camera.far = d.far;
+            camera.updateProjectionMatrix();
+        }
+    }
+
     renderer.render(scene, camera);
 }
 
@@ -832,26 +869,51 @@ function addObject(type) {
             break;
         }
         case 'camera': {
-            // 相机可视化：金字塔（镜头锥体）+ 立方体（机身）
+            // 相机可视化：参考 Blender 线框视锥体风格
             const group = new THREE.Group();
-            // 机身
-            const bodyGeo = new THREE.BoxGeometry(0.6, 0.4, 0.8);
-            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.3, metalness: 0.6 });
+
+            // ===== 线框视锥体（黄色线框 = 视野）=====
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffcc00, linewidth: 1 });
+
+            // 视锥体尺寸（远端矩形 = 成像平面）
+            const vw = 0.5, vh = 0.35, vd = 1.2;
+            const verts = new Float32Array([
+                // 远端矩形框（成像平面）
+                -vw,  vh, -vd,   vw,  vh, -vd,  // 上边
+                 vw,  vh, -vd,   vw, -vh, -vd,  // 右边
+                 vw, -vh, -vd,  -vw, -vh, -vd,  // 下边
+                -vw, -vh, -vd,  -vw,  vh, -vd,  // 左边
+                // 斜线：相机位置 → 远端4个角
+                0, 0, 0,       -vw,  vh, -vd,
+                0, 0, 0,        vw,  vh, -vd,
+                0, 0, 0,        vw, -vh, -vd,
+                0, 0, 0,       -vw, -vh, -vd,
+            ]);
+
+            const frustumGeo = new THREE.BufferGeometry();
+            frustumGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+            const frustum = new THREE.LineSegments(frustumGeo, lineMat);
+            group.add(frustum);
+
+            // ===== 相机机身（黑色小矩形，像 Blender 那样）=====
+            const bodyGeo = new THREE.PlaneGeometry(0.16, 0.12);
+            const bodyMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide });
             const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.z = -0.02;
             group.add(body);
-            // 镜头锥体（金字塔）
-            const coneGeo = new THREE.ConeGeometry(0.25, 0.5, 4);
-            const coneMat = new THREE.MeshStandardMaterial({ color: 0x66aaff, roughness: 0.2, metalness: 0.8, side: THREE.DoubleSide });
-            const cone = new THREE.Mesh(coneGeo, coneMat);
-            cone.rotation.x = Math.PI / 2;
-            cone.position.z = -0.65;
-            group.add(cone);
-            // 三脚架底座
-            const baseGeo = new THREE.BoxGeometry(0.8, 0.05, 0.8);
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
-            const base = new THREE.Mesh(baseGeo, baseMat);
-            base.position.y = -0.45;
-            group.add(base);
+
+            // ===== 前方指示箭头（小三角）=====
+            const arrowVerts = new Float32Array([
+                0, 0, -0.12,    -0.04, 0, -0.18,
+                0, 0, -0.12,     0.04, 0, -0.18,
+                0, 0, -0.12,     0, 0.04, -0.18,
+                0, 0, -0.12,     0, -0.04, -0.18,
+            ]);
+            const arrowGeo = new THREE.BufferGeometry();
+            arrowGeo.setAttribute('position', new THREE.BufferAttribute(arrowVerts, 3));
+            const arrow = new THREE.LineSegments(arrowGeo, lineMat);
+            group.add(arrow);
+
             mesh = group;
             mesh.name = '相机_' + (cameraObjects.length + 1);
             // 存储相机参数
@@ -905,6 +967,10 @@ function selectObject(obj) {
     }
     updatePropsPanel();
     updateObjectTree();
+    // 选中相机时更新锁定按钮状态
+    if (obj && obj.userData && obj.userData.isCameraObj) {
+        updateLockButtonUI();
+    }
 }
 
 // 高亮辅助函数：支持 Group（遍历子 Mesh）和 Mesh
@@ -943,6 +1009,10 @@ function deleteSelected() {
     // 如果是相机对象，也从 cameraObjects 中移除
     if (selectedObj.userData && selectedObj.userData.isCameraObj) {
         cameraObjects = cameraObjects.filter(c => c !== selectedObj);
+        // 如果删除的是锁定相机，解锁视图
+        if (lockedCamera === selectedObj) {
+            unlockCameraFromView();
+        }
     }
     if (transformControl) transformControl.detach();
     selectedObj = null;
@@ -968,6 +1038,8 @@ function clearScene() {
     selectedObj = null;
     // 重置背景为默认颜色
     scene.background = new THREE.Color(0x050508);
+    // 清空时解锁视图
+    if (lockedCamera) unlockCameraFromView();
     updateObjectTree();
     updatePropsPanel();
     showToast('场景已清空');
@@ -1147,6 +1219,8 @@ function snapToCamera(uuid) {
 
     // 隐藏所有相机可视化对象，避免遮挡画面
     cameraObjects.forEach(c => c.visible = false);
+    // 强制重置该相机的 scale（防止之前被意外缩放）
+    camObj.scale.set(1, 1, 1);
 
     const d = camObj.userData;
     // 计算相机参数
@@ -1165,7 +1239,63 @@ function snapToCamera(uuid) {
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(worldQuat);
     controls.target.copy(worldPos).add(fwd.multiplyScalar(5));
     controls.update();
-    showToast('已切换到相机: ' + camObj.name + '（相机可视化已隐藏）');
+    // 自动锁定该相机到视图
+    lockCameraToView(camObj);
+    showToast('已切换到相机: ' + camObj.name + '（已锁定到视图）');
+}
+
+// ============ 锁定相机到视图（Blender Camera to View）============
+function lockCameraToView(camObj) {
+    lockedCamera = camObj;
+    updateLockButtonUI();
+    // 立即同步一次当前相机状态
+    syncCameraFromView();
+}
+
+function unlockCameraFromView() {
+    lockedCamera = null;
+    updateLockButtonUI();
+    // 解锁后恢复所有相机可视化对象显示
+    cameraObjects.forEach(c => c.visible = true);
+}
+
+function toggleLockCamera() {
+    if (!selectedObj || !selectedObj.userData.isCameraObj) return;
+    if (lockedCamera === selectedObj) {
+        unlockCameraFromView();
+        showToast('已解锁视图');
+    } else {
+        lockCameraToView(selectedObj);
+        showToast('已锁定: ' + selectedObj.name + ' — 拖动视图即可移动相机');
+    }
+}
+
+function updateLockButtonUI() {
+    const btn = document.getElementById('btn-lock-cam');
+    if (!btn) return;
+    const isLocked = lockedCamera && selectedObj && lockedCamera === selectedObj;
+    if (isLocked) {
+        btn.textContent = '🔓 解锁视图';
+        btn.style.background = 'var(--accent)';
+        btn.style.color = '#fff';
+        btn.style.borderColor = 'var(--accent)';
+    } else {
+        btn.textContent = '🔒 锁定到视图';
+        btn.style.background = 'var(--panel)';
+        btn.style.color = 'var(--text)';
+        btn.style.borderColor = 'var(--divider)';
+    }
+}
+
+function syncCameraFromView() {
+    if (!lockedCamera) return;
+    // 将主相机的变换同步到锁定相机
+    lockedCamera.position.copy(camera.position);
+    lockedCamera.quaternion.copy(camera.quaternion);
+    // 同步 OrbitControls 的 target（相机看向的点）
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    const target = camera.position.clone().add(fwd.multiplyScalar(5));
+    // 不需要修改 controls.target，只需要把相机的位置和朝向同步回去即可
 }
 
 function updateTransform() {
@@ -1255,7 +1385,10 @@ function updateCameraPreview() {
     // 渲染 PIP 时临时隐藏相机可视化，避免相机拍到自身
     cameraObjects.forEach(c => c.visible = false);
     pipRenderer.render(scene, pipCamera);
-    cameraObjects.forEach(c => c.visible = true);
+    // 如果当前不是锁定状态，恢复相机显示；锁定状态下保持隐藏（避免遮挡主画面）
+    if (!lockedCamera) {
+        cameraObjects.forEach(c => c.visible = true);
+    }
 }
 
 // ============ 变换模式切换 ============
@@ -1345,6 +1478,10 @@ function resetCamera() {
     camera.position.set(10, 8, 10);
     controls.target.set(0, 0, 0);
     controls.update();
+    // 解锁视图
+    if (lockedCamera) {
+        unlockCameraFromView();
+    }
     showToast('相机已复位');
 }
 
