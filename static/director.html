@@ -501,6 +501,14 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
                 </div>
                 <div class="prop-group">
                     <div class="prop-row">
+                        <label class="prop-label">类型</label>
+                        <select class="prop-input" id="light-type" onchange="applyLightProps()" style="width:120px;cursor:pointer;">
+                            <option value="point">💡 点光</option>
+                            <option value="directional">☀️ 日光</option>
+                            <option value="spot">🔦 聚光</option>
+                        </select>
+                    </div>
+                    <div class="prop-row">
                         <label class="prop-label">强度</label>
                         <input class="prop-slider" type="range" id="light-intensity" min="0" max="300" value="100" oninput="applyLightProps()" style="width:100px;">
                         <span class="prop-value" id="light-intensity-val">1.0</span>
@@ -509,13 +517,23 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
                         <label class="prop-label">颜色</label>
                         <input class="prop-color" type="color" id="light-color-obj" value="#ffffff" oninput="applyLightProps()">
                     </div>
-                    <div class="prop-row">
+                    <div class="prop-row" id="light-distance-row">
                         <label class="prop-label">范围</label>
                         <input class="prop-input" type="number" id="light-distance" value="10" min="0.1" max="100" step="0.1" oninput="applyLightProps()" style="width:70px;">
                     </div>
-                    <div class="prop-row">
+                    <div class="prop-row" id="light-decay-row">
                         <label class="prop-label">衰减</label>
                         <input class="prop-input" type="number" id="light-decay" value="2" min="0" max="10" step="0.1" oninput="applyLightProps()" style="width:70px;">
+                    </div>
+                    <div class="prop-row" id="light-angle-row" style="display:none;">
+                        <label class="prop-label">角度</label>
+                        <input class="prop-slider" type="range" id="light-angle" min="1" max="90" value="45" oninput="applyLightProps()" style="width:80px;">
+                        <span class="prop-value" id="light-angle-val">45°</span>
+                    </div>
+                    <div class="prop-row" id="light-penumbra-row" style="display:none;">
+                        <label class="prop-label">边缘</label>
+                        <input class="prop-slider" type="range" id="light-penumbra" min="0" max="100" value="0" oninput="applyLightProps()" style="width:80px;">
+                        <span class="prop-value" id="light-penumbra-val">0</span>
                     </div>
                 </div>
                 <div class="prop-group">
@@ -537,12 +555,9 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
 <!-- 添加对象菜单 -->
 <div class="add-menu" id="add-menu">
     <div class="add-item" onclick="addObject('cube')"><span class="add-item-icon">⬜</span> 立方体</div>
-    <div class="add-item" onclick="addObject('sphere')"><span class="add-item-icon">⚪</span> 球体</div>
-    <div class="add-item" onclick="addObject('cylinder')"><span class="add-item-icon">🔵</span> 圆柱</div>
     <div class="add-item" onclick="addObject('plane')"><span class="add-item-icon">▬</span> 平面</div>
-    <div class="add-item" onclick="addObject('light')"><span class="add-item-icon">💡</span> 点光源</div>
+    <div class="add-item" onclick="addObject('light')"><span class="add-item-icon">💡</span> 灯光</div>
     <div class="add-item" onclick="addObject('character')"><span class="add-item-icon">🧑</span> 虚拟人物</div>
-    <div class="add-item" onclick="addObject('prop')"><span class="add-item-icon">📦</span> 道具</div>
     <div class="add-item" onclick="addObject('camera')"><span class="add-item-icon">📷</span> 相机</div>
 </div>
 
@@ -837,12 +852,13 @@ function addObject(type) {
             const geo = new THREE.SphereGeometry(0.15, 16, 16);
             const mat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
             mesh = new THREE.Mesh(geo, mat);
-            mesh.name = '点光源_' + (objects.length + 1);
-            // 添加实际光源
-            const pl = new THREE.PointLight(0xfff5e6, 1, 20);
-            pl.castShadow = true;
-            mesh.add(pl);
-            mesh.userData.lightSource = pl;
+            mesh.name = '灯光_' + (objects.length + 1);
+            // 默认创建点光源
+            const light = new THREE.PointLight(0xfff5e6, 1, 20);
+            light.castShadow = true;
+            mesh.add(light);
+            mesh.userData.lightSource = light;
+            mesh.userData.lightType = 'point';
             break;
         }
         case 'character': {
@@ -1352,25 +1368,101 @@ function applyCameraTransform() {
 function renderLightProps(lightObj) {
     const light = lightObj.userData.lightSource;
     if (!light) return;
+    const type = lightObj.userData.lightType || 'point';
+    document.getElementById('light-type').value = type;
     document.getElementById('light-intensity').value = Math.round(light.intensity * 100);
     document.getElementById('light-intensity-val').textContent = light.intensity.toFixed(1);
     document.getElementById('light-color-obj').value = '#' + light.color.getHexString();
-    document.getElementById('light-distance').value = light.distance.toFixed(1);
-    document.getElementById('light-decay').value = light.decay.toFixed(1);
     document.getElementById('light-px').value = lightObj.position.x.toFixed(2);
     document.getElementById('light-py').value = lightObj.position.y.toFixed(2);
     document.getElementById('light-pz').value = lightObj.position.z.toFixed(2);
+
+    // 根据类型显示/隐藏不同参数
+    const isPoint = type === 'point';
+    const isSpot = type === 'spot';
+    document.getElementById('light-distance-row').style.display = isPoint || isSpot ? 'flex' : 'none';
+    document.getElementById('light-decay-row').style.display = isPoint || isSpot ? 'flex' : 'none';
+    document.getElementById('light-angle-row').style.display = isSpot ? 'flex' : 'none';
+    document.getElementById('light-penumbra-row').style.display = isSpot ? 'flex' : 'none';
+
+    if (isPoint || isSpot) {
+        document.getElementById('light-distance').value = light.distance.toFixed(1);
+        document.getElementById('light-decay').value = light.decay.toFixed(1);
+    }
+    if (isSpot) {
+        document.getElementById('light-angle').value = THREE.MathUtils.radToDeg(light.angle).toFixed(0);
+        document.getElementById('light-angle-val').textContent = THREE.MathUtils.radToDeg(light.angle).toFixed(0) + '°';
+        document.getElementById('light-penumbra').value = Math.round(light.penumbra * 100);
+        document.getElementById('light-penumbra-val').textContent = light.penumbra.toFixed(2);
+    }
 }
 
 function applyLightProps() {
     if (!selectedObj || selectedObj.userData.type !== 'light') return;
-    const light = selectedObj.userData.lightSource;
-    if (!light) return;
-    light.intensity = parseFloat(document.getElementById('light-intensity').value) / 100;
-    document.getElementById('light-intensity-val').textContent = light.intensity.toFixed(1);
-    light.color.set(document.getElementById('light-color-obj').value);
-    light.distance = parseFloat(document.getElementById('light-distance').value) || 10;
-    light.decay = parseFloat(document.getElementById('light-decay').value) || 2;
+    const newType = document.getElementById('light-type').value;
+    const oldType = selectedObj.userData.lightType || 'point';
+    const intensity = parseFloat(document.getElementById('light-intensity').value) / 100;
+    const color = document.getElementById('light-color-obj').value;
+
+    // 如果类型变了，重建光源对象
+    if (newType !== oldType || !selectedObj.userData.lightSource) {
+        // 移除旧光源
+        const oldLight = selectedObj.userData.lightSource;
+        if (oldLight) {
+            selectedObj.remove(oldLight);
+            if (oldLight.dispose) oldLight.dispose();
+        }
+        // 创建新光源
+        let newLight;
+        if (newType === 'directional') {
+            newLight = new THREE.DirectionalLight(color, intensity);
+            newLight.castShadow = true;
+            newLight.shadow.mapSize.set(2048, 2048);
+        } else if (newType === 'spot') {
+            const dist = parseFloat(document.getElementById('light-distance').value) || 10;
+            const decay = parseFloat(document.getElementById('light-decay').value) || 2;
+            const angle = THREE.MathUtils.degToRad(parseFloat(document.getElementById('light-angle').value) || 45);
+            const penumbra = parseFloat(document.getElementById('light-penumbra').value) / 100 || 0;
+            newLight = new THREE.SpotLight(color, intensity, dist, angle, penumbra, decay);
+            newLight.castShadow = true;
+            newLight.shadow.mapSize.set(2048, 2048);
+        } else {
+            const dist = parseFloat(document.getElementById('light-distance').value) || 10;
+            const decay = parseFloat(document.getElementById('light-decay').value) || 2;
+            newLight = new THREE.PointLight(color, intensity, dist, decay);
+            newLight.castShadow = true;
+        }
+        selectedObj.add(newLight);
+        selectedObj.userData.lightSource = newLight;
+        selectedObj.userData.lightType = newType;
+        // 更新名称
+        const typeNames = { point: '点光', directional: '日光', spot: '聚光' };
+        const baseName = selectedObj.name.replace(/_.*$/, '') || '灯光';
+        selectedObj.name = baseName + '_' + typeNames[newType];
+        showToast('已切换为: ' + typeNames[newType]);
+    } else {
+        // 类型没变，只更新参数
+        const light = selectedObj.userData.lightSource;
+        light.intensity = intensity;
+        light.color.set(color);
+        if (newType === 'point' || newType === 'spot') {
+            light.distance = parseFloat(document.getElementById('light-distance').value) || 10;
+            light.decay = parseFloat(document.getElementById('light-decay').value) || 2;
+        }
+        if (newType === 'spot') {
+            light.angle = THREE.MathUtils.degToRad(parseFloat(document.getElementById('light-angle').value) || 45);
+            light.penumbra = parseFloat(document.getElementById('light-penumbra').value) / 100 || 0;
+        }
+    }
+
+    document.getElementById('light-intensity-val').textContent = intensity.toFixed(1);
+    if (newType === 'spot') {
+        document.getElementById('light-angle-val').textContent = document.getElementById('light-angle').value + '°';
+        document.getElementById('light-penumbra-val').textContent = (parseFloat(document.getElementById('light-penumbra').value) / 100).toFixed(2);
+    }
+    // 刷新面板以显示/隐藏对应参数行
+    renderLightProps(selectedObj);
+    updateObjectTree();
 }
 
 function applyLightTransform() {
