@@ -77,6 +77,17 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
 .tree-item.indent-1 { padding-left:22px; }
 .tree-item.indent-2 { padding-left:36px; }
 .tree-icon { font-size:13px; flex-shrink:0; width:18px; text-align:center; }
+/* 展开/折叠箭头 */
+.tree-expand {
+    width:16px; height:16px; border-radius:3px; border:none; background:transparent;
+    color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center;
+    font-size:10px; flex-shrink:0; transition:transform .15s;
+    margin-right:2px;
+}
+.tree-expand:hover { background:rgba(255,255,255,.08); color:var(--text); }
+.tree-expand.collapsed { transform:rotate(-90deg); }
+.tree-children { }
+.tree-children.collapsed { display:none; }
 .tree-visibility {
     margin-left:auto; opacity:0; width:20px; height:20px; border-radius:4px; border:none;
     background:transparent; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center;
@@ -572,6 +583,7 @@ let transformControl = null;
 let transformMode = 'translate';  // translate | rotate | scale
 let cameraObjects = [];       // 场景中的相机对象列表
 let lockedCamera = null;      // 锁定到视图的相机对象（Blender 的 Camera to View）
+let treeExpandedState = {};   // 对象树展开/折叠状态 { uuid: true/false }
 
 // ============ 网格纹理生成 ============
 function createGridTexture() {
@@ -1146,9 +1158,13 @@ function clearScene() {
 // ============ 对象树 UI ============
 function updateObjectTree() {
     const tree = document.getElementById('object-tree');
-    // 合并 objects 和 cameraObjects
     const allObjects = [...objects, ...cameraObjects];
-    let html = '';
+
+    // 获取一个节点的人形子节点列表
+    function getHumanChildren(obj) {
+        if (!obj.children) return [];
+        return obj.children.filter(child => child.userData && (child.userData.isHumanPart || child.userData.isHumanJoint || child.userData.isHuman));
+    }
 
     function renderNode(obj, depth) {
         const isSel = selectedObj === obj;
@@ -1162,31 +1178,43 @@ function updateObjectTree() {
             icon = getObjIcon(obj.userData && obj.userData.type ? obj.userData.type : 'prop');
         }
         const name = obj.name || '未命名';
-        html += `<div class="tree-item ${isSel ? 'selected' : ''}" style="padding-left:${12 + indent}px;" onclick="onTreeClick(event, '${obj.uuid}')">
-            <span class="tree-icon">${icon}</span>
-            <span>${name}</span>
-        </div>`;
-        // 递归渲染人形子节点
-        if (obj.userData && obj.userData.isHuman) {
-            obj.children.forEach(child => {
-                if (child.userData && (child.userData.isHumanPart || child.userData.isHumanJoint)) {
-                    renderNode(child, depth + 1);
-                }
+        const children = getHumanChildren(obj);
+        const hasChildren = children.length > 0;
+        const isExpanded = treeExpandedState[obj.uuid] !== false; // 默认展开
+
+        let html = '';
+
+        // 节点行（带展开箭头和点击事件）
+        html += `<div class="tree-item ${isSel ? 'selected' : ''}" style="padding-left:${12 + indent}px;" onclick="onTreeClick(event, '${obj.uuid}')">`;
+        if (hasChildren) {
+            const arrowCls = isExpanded ? '' : 'collapsed';
+            html += `<button class="tree-expand ${arrowCls}" onclick="event.stopPropagation(); toggleTreeExpand('${obj.uuid}')">▼</button>`;
+        } else {
+            html += `<span style="width:16px;flex-shrink:0;"></span>`;
+        }
+        html += `<span class="tree-icon">${icon}</span><span>${name}</span></div>`;
+
+        // 子节点容器（可折叠）
+        if (hasChildren && isExpanded) {
+            children.forEach(child => {
+                html += renderNode(child, depth + 1);
             });
         }
-        // 如果子节点是人形部位，继续递归
-        if (obj.userData && (obj.userData.isHumanPart || obj.userData.isHumanJoint)) {
-            obj.children.forEach(child => {
-                if (child.userData && (child.userData.isHumanPart || child.userData.isHumanJoint)) {
-                    renderNode(child, depth + 1);
-                }
-            });
-        }
+
+        return html;
     }
 
-    allObjects.forEach(obj => renderNode(obj, 0));
+    let html = '';
+    allObjects.forEach(obj => {
+        html += renderNode(obj, 0);
+    });
     tree.innerHTML = html || '<div style="padding:12px 8px;font-size:11px;color:var(--muted);text-align:center;">点击 ＋ 添加对象</div>';
     document.getElementById('obj-badge').textContent = allObjects.length + ' 对象';
+}
+
+function toggleTreeExpand(uuid) {
+    treeExpandedState[uuid] = treeExpandedState[uuid] === false;
+    updateObjectTree();
 }
 
 function getObjIcon(type) {
