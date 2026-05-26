@@ -1260,6 +1260,11 @@ function updateCameraPreview() {
 
 // ============ 变换模式切换 ============
 function setTransformMode(mode) {
+    // 相机对象不支持缩放
+    if (selectedObj && selectedObj.userData && selectedObj.userData.isCameraObj && mode === 'scale') {
+        showToast('相机不支持缩放');
+        mode = 'translate';
+    }
     transformMode = mode;
     if (transformControl) {
         transformControl.setMode(mode);
@@ -1291,8 +1296,9 @@ function updatePropsFromObject() {
         document.getElementById('inp-sy').value = s.y.toFixed(2);
         document.getElementById('inp-sz').value = s.z.toFixed(2);
     }
-    // 相机对象同步相机参数
+    // 相机对象同步相机参数，并强制重置 scale（相机可视化不可缩放）
     if (selectedObj.userData && selectedObj.userData.isCameraObj) {
+        selectedObj.scale.set(1, 1, 1);
         syncCameraPropsToPanel(selectedObj);
     }
     // 灯光对象同步灯光参数
