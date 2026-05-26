@@ -469,6 +469,49 @@ let transformControl = null;
 let transformMode = 'translate';  // translate | rotate | scale
 let cameraObjects = [];       // 场景中的相机对象列表
 
+// ============ 网格纹理生成 ============
+function createGridTexture() {
+    // 生成 512x512 的网格纹理，用于地面
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+
+    // 深色底色
+    ctx.fillStyle = '#08080f';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 主网格线（大格）
+    ctx.strokeStyle = 'rgba(108,92,231,0.25)';
+    ctx.lineWidth = 1;
+    const bigStep = 64;  // 512/8 = 64，8x8 大格
+    for (let x = 0; x <= 512; x += bigStep) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+    }
+    for (let y = 0; y <= 512; y += bigStep) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+    }
+
+    // 细网格线（小格）
+    ctx.strokeStyle = 'rgba(108,92,231,0.10)';
+    ctx.lineWidth = 0.5;
+    const smallStep = 8;
+    for (let x = 0; x <= 512; x += smallStep) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+    }
+    for (let y = 0; y <= 512; y += smallStep) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(5, 5);  // 40x40 地面，每格 8 单位
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    return tex;
+}
+
 // ============ 初始化 Three.js ============
 function init() {
     console.log('[导演台] 开始初始化...');
@@ -522,9 +565,16 @@ function init() {
     gridHelper.name = 'grid';
     scene.add(gridHelper);
 
-    // 地面平面（接收阴影）
+    // 网格地面（接收阴影，带网格纹理）
     const groundGeo = new THREE.PlaneGeometry(40, 40);
-    const groundMat = new THREE.MeshStandardMaterial({ color:0x0a0a12, roughness:0.9, metalness:0.1 });
+    const groundTex = createGridTexture();
+    const groundMat = new THREE.MeshStandardMaterial({
+        map: groundTex,
+        roughness:0.9,
+        metalness:0.1,
+        transparent: true,
+        opacity: 0.85
+    });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
@@ -722,11 +772,14 @@ function addObject(type) {
 
     mesh.castShadow = true;
     mesh.position.y = type === 'plane' ? 0 : 0.5;
-    mesh.userData = { type, id: Date.now() };
+    // 保留 case 里已设置的 userData（如相机的 isCameraObj），只补充 type 和 id
+    mesh.userData = { ...mesh.userData, type, id: Date.now() };
     scene.add(mesh);
     objects.push(mesh);
     updateObjectTree();
     selectObject(mesh);
+    // 关闭添加菜单，防止重复添加
+    document.getElementById('add-menu').classList.remove('show');
     showToast('已添加: ' + mesh.name);
 }
 
@@ -1151,9 +1204,13 @@ function toggle2D() {
 function toggleGrid() {
     const grid = scene.getObjectByName('grid');
     const axes = scene.getObjectByName('axes');
+    const ground = scene.getObjectByName('ground');
     if (grid) { grid.visible = !grid.visible; gridVisible = grid.visible; }
     if (axes) { axes.visible = gridVisible; }
+    // 同步地面网格显示/隐藏
+    if (ground) { ground.visible = gridVisible; }
     document.getElementById('btn-grid').classList.toggle('active', gridVisible);
+    showToast(gridVisible ? '网格已显示' : '网格已隐藏');
 }
 
 function toggleLight() {
@@ -1519,9 +1576,9 @@ function onCanvasClick(e) {
         // 找到顶层用户对象
         while (obj.parent && !objects.includes(obj)) obj = obj.parent;
         if (objects.includes(obj)) selectObject(obj);
-    } else {
-        selectObject(null);
     }
+    // 点空白处不再取消选中，避免属性面板消失
+    // 如需取消选中，按 Escape 键
 }
 
 function onKeyDown(e) {
@@ -1529,6 +1586,15 @@ function onKeyDown(e) {
         if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
             deleteSelected();
         }
+    }
+    if (e.key === 'Escape') {
+        if (selectedObj) {
+            selectObject(null);
+            showToast('已取消选中');
+        }
+        // 关闭所有弹出菜单
+        document.getElementById('add-menu').classList.remove('show');
+        document.getElementById('res-selector').classList.remove('show');
     }
 }
 
