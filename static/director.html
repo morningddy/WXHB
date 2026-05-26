@@ -135,6 +135,10 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
 }
 .bottom-btn:hover { background:var(--hover); color:var(--text); border-color:var(--divider); }
 .bottom-btn.active { color:var(--accent); border-color:rgba(108,92,231,.3); background:var(--accent-glow); }
+/* 变换模式按钮高亮：移动=红，旋转=绿，缩放=蓝 */
+.bottom-btn.translate-active { color:#ff4444 !important; border-color:rgba(255,68,68,.4); background:rgba(255,68,68,.12); }
+.bottom-btn.rotate-active { color:#44ff44 !important; border-color:rgba(68,255,68,.4); background:rgba(68,255,68,.12); }
+.bottom-btn.scale-active { color:#4488ff !important; border-color:rgba(68,136,255,.4); background:rgba(68,136,255,.12); }
 .bottom-sep { width:1px; height:22px; background:var(--divider); margin:0 2px; flex-shrink:0; }
 .bottom-label { font-size:9px; font-weight:700; color:var(--muted); letter-spacing:.04em; }
 
@@ -294,6 +298,10 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
             <div class="bottom-sep"></div>
             <button class="bottom-btn" id="btn-light" onclick="toggleLight()" title="灯光开关">💡</button>
             <div class="bottom-sep"></div>
+            <button class="bottom-btn" id="btn-translate" onclick="setTransformMode('translate')" title="移动 (W)">⟶</button>
+            <button class="bottom-btn" id="btn-rotate" onclick="setTransformMode('rotate')" title="旋转 (E)">⟳</button>
+            <button class="bottom-btn" id="btn-scale" onclick="setTransformMode('scale')" title="缩放 (R)">⟷</button>
+            <div class="bottom-sep"></div>
             <button class="bottom-btn" id="btn-screenshot" onclick="takeScreenshot()" title="截图">📷</button>
             <button class="bottom-btn" id="btn-record" onclick="toggleRecording()" title="录制视频">
                 ⏺
@@ -374,6 +382,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
     <div class="add-item" onclick="addObject('light')"><span class="add-item-icon">💡</span> 点光源</div>
     <div class="add-item" onclick="addObject('character')"><span class="add-item-icon">🧑</span> 虚拟人物</div>
     <div class="add-item" onclick="addObject('prop')"><span class="add-item-icon">📦</span> 道具</div>
+    <div class="add-item" onclick="addObject('camera')"><span class="add-item-icon">📷</span> 相机</div>
 </div>
 
 <!-- 提示条 -->
@@ -387,6 +396,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); col
 <!-- Three.js r124（本地 UMD 加载器，稳定可靠） -->
 <script src="/static/js/three.min.js"></script>
 <script src="/static/js/OrbitControls.js"></script>
+<script src="/static/js/TransformControls.js"></script>
 <script src="/static/js/GLTFLoader.js"></script>
 <script src="/static/js/OBJLoader.js"></script>
 <script src="/static/js/MTLLoader.js"></script>
@@ -407,6 +417,10 @@ let lastTime = 0;
 let frameCount = 0;
 let fps = 0;
 let ambientLight = null;
+// 变换控件
+let transformControl = null;
+let transformMode = 'translate';  // translate | rotate | scale
+let cameraObjects = [];       // 场景中的相机对象列表
 
 // ============ 初始化 Three.js ============
 function init() {
@@ -475,6 +489,18 @@ function init() {
     axesHelper.name = 'axes';
     scene.add(axesHelper);
 
+    // 变换控件（Blender 风格 Gizmo）
+    transformControl = new THREE.TransformControls(camera, renderer.domElement);
+    transformControl.setMode(transformMode);
+    transformControl.addEventListener('objectChange', () => {
+        if (selectedObj) updatePropsFromObject();
+    });
+    transformControl.addEventListener('mouseDown', () => controls.enabled = false);
+    transformControl.addEventListener('mouseUp', () => controls.enabled = true);
+    scene.add(transformControl);
+    // 默认不贴附任何对象
+    transformControl.detach();
+
     // 事件
     window.addEventListener('resize', onResize);
     canvas.addEventListener('click', onCanvasClick);
@@ -488,6 +514,9 @@ function init() {
 
     // 初始对象
     addObject('cube');  // 默认添加一个立方体
+
+    // 初始化变换模式（默认：移动）
+    setTransformMode('translate');
 
     // 动画循环
     animate();
@@ -601,6 +630,41 @@ function addObject(type) {
             mesh.name = '道具_' + (objects.length + 1);
             break;
         }
+        case 'camera': {
+            // 相机可视化：金字塔（镜头锥体）+ 立方体（机身）
+            const group = new THREE.Group();
+            // 机身
+            const bodyGeo = new THREE.BoxGeometry(0.6, 0.4, 0.8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.3, metalness: 0.6 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            group.add(body);
+            // 镜头锥体（金字塔）
+            const coneGeo = new THREE.ConeGeometry(0.25, 0.5, 4);
+            const coneMat = new THREE.MeshStandardMaterial({ color: 0x66aaff, roughness: 0.2, metalness: 0.8, side: THREE.DoubleSide });
+            const cone = new THREE.Mesh(coneGeo, coneMat);
+            cone.rotation.x = Math.PI / 2;
+            cone.position.z = -0.65;
+            group.add(cone);
+            // 三脚架底座
+            const baseGeo = new THREE.BoxGeometry(0.8, 0.05, 0.8);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = -0.45;
+            group.add(base);
+            mesh = group;
+            mesh.name = '相机_' + (cameraObjects.length + 1);
+            // 存储相机参数
+            mesh.userData = {
+                type: 'camera',
+                isCameraObj: true,
+                fov: 50,
+                near: 0.1,
+                far: 1000,
+                focalLength: 35  // mm
+            };
+            cameraObjects.push(mesh);
+            break;
+        }
     }
 
     mesh.castShadow = true;
@@ -614,13 +678,22 @@ function addObject(type) {
 }
 
 function selectObject(obj) {
-    // 清除旧选中
+    // TransformControls：先 detach 旧对象
+    if (transformControl) transformControl.detach();
+
+    // 清除旧选中高亮
     if (selectedObj) {
         if (selectedObj.material && selectedObj.material.emissive) {
             selectedObj.material.emissive.setHex(selectedObj.userData.oldEmissive || 0);
         }
     }
     selectedObj = obj;
+
+    // TransformControls：attach 新对象（相机对象除外）
+    if (transformControl && obj && !obj.userData.isCameraObj) {
+        transformControl.attach(obj);
+    }
+
     if (obj && obj.material && obj.material.emissive) {
         obj.userData.oldEmissive = obj.material.emissive.getHex();
         obj.material.emissive.setHex(0x333300);
@@ -633,6 +706,11 @@ function deleteSelected() {
     if (!selectedObj) return;
     scene.remove(selectedObj);
     objects = objects.filter(o => o !== selectedObj);
+    // 如果是相机对象，也从 cameraObjects 中移除
+    if (selectedObj.userData && selectedObj.userData.isCameraObj) {
+        cameraObjects = cameraObjects.filter(c => c !== selectedObj);
+    }
+    if (transformControl) transformControl.detach();
     selectedObj = null;
     updateObjectTree();
     updatePropsPanel();
@@ -653,27 +731,31 @@ function clearScene() {
 // ============ 对象树 UI ============
 function updateObjectTree() {
     const tree = document.getElementById('object-tree');
-    // 只列出可操作对象
+    // 合并 objects 和 cameraObjects
+    const allObjects = [...objects, ...cameraObjects];
     let html = '';
-    objects.forEach((obj, i) => {
+    allObjects.forEach(obj => {
         const isSel = selectedObj === obj;
-        const icon = getObjIcon(obj.userData.type);
-        html += `<div class="tree-item ${isSel ? 'selected' : ''}" onclick="onTreeClick(event, ${i})">
+        const icon = getObjIcon(obj.userData && obj.userData.type ? obj.userData.type : 'prop');
+        const name = obj.name || '未命名';
+        html += `<div class="tree-item ${isSel ? 'selected' : ''}" onclick="onTreeClick(event, '${obj.uuid}')">
             <span class="tree-icon">${icon}</span>
-            <span>${obj.name}</span>
+            <span>${name}</span>
         </div>`;
     });
     tree.innerHTML = html || '<div style="padding:12px 8px;font-size:11px;color:var(--muted);text-align:center;">点击 ＋ 添加对象</div>';
-    document.getElementById('obj-badge').textContent = objects.length + ' 对象';
+    document.getElementById('obj-badge').textContent = allObjects.length + ' 对象';
 }
 
 function getObjIcon(type) {
-    const icons = { cube:'⬜', sphere:'⚪', cylinder:'🔵', plane:'▬', light:'💡', character:'🧑', prop:'📦' };
+    const icons = { cube:'⬜', sphere:'⚪', cylinder:'🔵', plane:'▬', light:'💡', character:'🧑', prop:'📦', camera:'📷' };
     return icons[type] || '📦';
 }
 
-function onTreeClick(e, idx) {
-    if (idx >= 0 && idx < objects.length) selectObject(objects[idx]);
+function onTreeClick(e, uuid) {
+    const allObjects = [...objects, ...cameraObjects];
+    const obj = allObjects.find(o => o.uuid === uuid);
+    if (obj) selectObject(obj);
 }
 
 // ============ 属性面板 ============
@@ -683,7 +765,12 @@ function updatePropsPanel() {
         pc.innerHTML = '<div style="padding:20px 12px;font-size:11px;color:var(--muted);text-align:center;">选中对象以编辑属性</div>';
         return;
     }
-    // 简化：只更新位置数值
+    // 相机对象：显示相机参数面板
+    if (selectedObj.userData && selectedObj.userData.isCameraObj) {
+        renderCameraProps(selectedObj);
+        return;
+    }
+    // 普通对象：显示变换属性
     const p = selectedObj.position;
     const r = selectedObj.rotation;
     const s = selectedObj.scale;
@@ -698,8 +785,124 @@ function updatePropsPanel() {
     document.getElementById('inp-sz').value = s.z.toFixed(2);
 }
 
+function renderCameraProps(camObj) {
+    const d = camObj.userData;
+    const pc = document.getElementById('props-content');
+    pc.innerHTML = `
+        <div class="prop-group">
+            <div class="prop-label">📷 相机参数</div>
+        </div>
+        <div class="prop-group">
+            <div class="prop-row">
+                <label class="prop-label">FOV</label>
+                <input class="prop-input" type="number" id="cam-fov" value="${d.fov}" min="10" max="120" onchange="applyCameraProps()" style="width:70px;">
+                <span class="prop-unit">°</span>
+            </div>
+            <div class="prop-row">
+                <label class="prop-label">Near</label>
+                <input class="prop-input" type="number" id="cam-near" value="${d.near}" min="0.01" max="100" step="0.1" onchange="applyCameraProps()" style="width:70px;">
+            </div>
+            <div class="prop-row">
+                <label class="prop-label">Far</label>
+                <input class="prop-input" type="number" id="cam-far" value="${d.far}" min="10" max="10000" step="10" onchange="applyCameraProps()" style="width:70px;">
+            </div>
+            <div class="prop-row">
+                <label class="prop-label">焦距</label>
+                <input class="prop-input" type="number" id="cam-focal" value="${d.focalLength}" min="10" max="200" step="1" onchange="applyCameraProps()" style="width:70px;">
+                <span class="prop-unit">mm</span>
+            </div>
+        </div>
+        <div class="prop-group">
+            <button class="prop-btn" onclick="snapToCamera('${camObj.uuid}')" style="width:100%;padding:6px 0;border-radius:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px;">
+                📷 设为当前相机
+            </button>
+        </div>
+        <div class="prop-group">
+            <div class="prop-label">变换</div>
+            <div class="prop-row">
+                <label class="prop-label">位置 X</label>
+                <input class="prop-input" type="number" id="cam-px" value="${camObj.position.x.toFixed(2)}" step="0.1" onchange="applyCameraTransform()" style="width:65px;">
+            </div>
+            <div class="prop-row">
+                <label class="prop-label">位置 Y</label>
+                <input class="prop-input" type="number" id="cam-py" value="${camObj.position.y.toFixed(2)}" step="0.1" onchange="applyCameraTransform()" style="width:65px;">
+            </div>
+            <div class="prop-row">
+                <label class="prop-label">位置 Z</label>
+                <input class="prop-input" type="number" id="cam-pz" value="${camObj.position.z.toFixed(2)}" step="0.1" onchange="applyCameraTransform()" style="width:65px;">
+            </div>
+            <div class="prop-row">
+                <label class="prop-label">旋转 Y</label>
+                <input class="prop-input" type="number" id="cam-ry" value="${THREE.MathUtils.radToDeg(camObj.rotation.y).toFixed(0)}" step="1" onchange="applyCameraTransform()" style="width:65px;">
+                <span class="prop-unit">°</span>
+            </div>
+        </div>
+    `;
+}
+
+function syncCameraPropsToPanel(camObj) {
+    // 从对象同步到面板输入值（拖动 Gizmo 时调用）
+    const d = camObj.userData;
+    const fovEl = document.getElementById('cam-fov');
+    if (fovEl) {
+        document.getElementById('cam-fov').value = d.fov;
+        document.getElementById('cam-near').value = d.near;
+        document.getElementById('cam-far').value = d.far;
+        document.getElementById('cam-focal').value = d.focalLength;
+        document.getElementById('cam-px').value = camObj.position.x.toFixed(2);
+        document.getElementById('cam-py').value = camObj.position.y.toFixed(2);
+        document.getElementById('cam-pz').value = camObj.position.z.toFixed(2);
+        document.getElementById('cam-ry').value = THREE.MathUtils.radToDeg(camObj.rotation.y).toFixed(0);
+    }
+}
+
+function applyCameraProps() {
+    if (!selectedObj || !selectedObj.userData.isCameraObj) return;
+    const d = selectedObj.userData;
+    d.fov = parseFloat(document.getElementById('cam-fov').value) || 50;
+    d.near = parseFloat(document.getElementById('cam-near').value) || 0.1;
+    d.far = parseFloat(document.getElementById('cam-far').value) || 1000;
+    d.focalLength = parseFloat(document.getElementById('cam-focal').value) || 35;
+    showToast('相机参数已更新（预览生效需设为当前相机）');
+}
+
+function applyCameraTransform() {
+    if (!selectedObj || !selectedObj.userData.isCameraObj) return;
+    const px = parseFloat(document.getElementById('cam-px').value) || 0;
+    const py = parseFloat(document.getElementById('cam-py').value) || 0;
+    const pz = parseFloat(document.getElementById('cam-pz').value) || 0;
+    const ry = THREE.MathUtils.degToRad(parseFloat(document.getElementById('cam-ry').value) || 0);
+    selectedObj.position.set(px, py, pz);
+    selectedObj.rotation.set(0, ry, 0);
+}
+
+function snapToCamera(uuid) {
+    // 将视口相机切换到该相机对象的角度和位置
+    const camObj = objects.find(o => o.uuid === uuid) || cameraObjects.find(o => o.uuid === uuid);
+    if (!camObj) return;
+    const d = camObj.userData;
+    // 计算相机参数
+    camera.fov = d.fov;
+    camera.near = d.near;
+    camera.far = d.far;
+    camera.updateProjectionMatrix();
+    // 将主相机移到该对象的位置和朝向
+    const worldPos = new THREE.Vector3();
+    camObj.getWorldPosition(worldPos);
+    const worldQuat = new THREE.Quaternion();
+    camObj.getWorldQuaternion(worldQuat);
+    camera.position.copy(worldPos);
+    camera.quaternion.copy(worldQuat);
+    // 更新 OrbitControls 目标
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(worldQuat);
+    controls.target.copy(worldPos).add(fwd.multiplyScalar(5));
+    controls.update();
+    showToast('已切换到相机: ' + camObj.name);
+}
+
 function updateTransform() {
     if (!selectedObj) return;
+    // 相机对象：只更新变换，不更新 FOV 等参数
     const px = parseFloat(document.getElementById('inp-px').value) || 0;
     const py = parseFloat(document.getElementById('inp-py').value) || 0;
     const pz = parseFloat(document.getElementById('inp-pz').value) || 0;
@@ -712,6 +915,45 @@ function updateTransform() {
     selectedObj.position.set(px, py, pz);
     selectedObj.rotation.set(rx, ry, rz);
     selectedObj.scale.set(sx, sy, sz);
+}
+
+// ============ 变换模式切换 ============
+function setTransformMode(mode) {
+    transformMode = mode;
+    if (transformControl) {
+        transformControl.setMode(mode);
+    }
+    // 更新按钮高亮
+    ['btn-translate','btn-rotate','btn-scale'].forEach(id => {
+        document.getElementById(id).classList.remove('active','translate-active','rotate-active','scale-active');
+    });
+    const cls = { translate:'translate-active', rotate:'rotate-active', scale:'scale-active' }[mode];
+    document.getElementById('btn-' + mode).classList.add('active', cls);
+}
+
+function updatePropsFromObject() {
+    // 从选中对象同步数值到属性面板（拖动 Gizmo 时实时调用）
+    if (!selectedObj) return;
+    const p = selectedObj.position;
+    const r = selectedObj.rotation;
+    const s = selectedObj.scale;
+    // 普通对象或相机对象的位置/旋转/缩放输入
+    const pxEl = document.getElementById('inp-px');
+    if (pxEl) {
+        document.getElementById('inp-px').value = p.x.toFixed(2);
+        document.getElementById('inp-py').value = p.y.toFixed(2);
+        document.getElementById('inp-pz').value = p.z.toFixed(2);
+        document.getElementById('inp-rx').value = THREE.MathUtils.radToDeg(r.x).toFixed(0);
+        document.getElementById('inp-ry').value = THREE.MathUtils.radToDeg(r.y).toFixed(0);
+        document.getElementById('inp-rz').value = THREE.MathUtils.radToDeg(r.z).toFixed(0);
+        document.getElementById('inp-sx').value = s.x.toFixed(2);
+        document.getElementById('inp-sy').value = s.y.toFixed(2);
+        document.getElementById('inp-sz').value = s.z.toFixed(2);
+    }
+    // 如果是相机对象，同步相机参数
+    if (selectedObj.userData && selectedObj.userData.isCameraObj) {
+        syncCameraPropsToPanel(selectedObj);
+    }
 }
 
 // ============ 相机控制 ============
