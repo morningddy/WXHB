@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.dll
+*.exe
+*.pyd
+python/
+env/
+envs/
+venv/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Project temp
+*.log
+.output/
+.python_history
+
+# packages folder (offline install)
+packages/
+
+# get-pip.py
+get-pip.py
