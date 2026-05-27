@@ -895,7 +895,7 @@
                 <div id="gateStatus" class="gate-status" data-i18n="canvas.loadingCanvases">正在加载画布列表...</div>
                 <div class="gate-create-row">
                     <input id="gateTitleInput" class="gate-name-input" type="text" maxlength="80" placeholder="新画布名称（可留空使用默认）" data-i18n-placeholder="canvas.newCanvasPlaceholder">
-                    <button id="gateConfirmBtn" class="create-confirm" type="button" title="确定" aria-label="确定" data-i18n-title="common.confirm"><i data-lucide="check" class="w-4 h-4"></i></button>
+                    <button id="gateConfirmBtn" class="create-confirm" type="button" title="确定" aria-label="确定" data-i18n-title="common.confirm" onclick="createCanvas()"><i data-lucide="check" class="w-4 h-4"></i></button>
                     <button id="gateCancelBtn" class="create-cancel" type="button" title="取消" aria-label="取消" data-i18n-title="common.cancel"><i data-lucide="x" class="w-4 h-4"></i></button>
                 </div>
                 <div class="trash-note"><i data-lucide="info" class="w-3.5 h-3.5 inline-block align-text-bottom mr-1"></i><span data-i18n="canvas.trashNote">回收站中的画布会在 30 天后自动清理。</span></div>
@@ -2181,6 +2181,7 @@
             refreshIcons();
         }
         async function createCanvas(){
+            console.log('[createCanvas] start');
             const customTitle = gateTitleInput?.value.trim();
             const title = customTitle || `${tr('canvas.newCanvas')} ${new Date().toLocaleTimeString(window.StudioI18n?.lang() === 'en' ? 'en-US' : 'zh-CN', {hour:'2-digit', minute:'2-digit'})}`;
             trashMode = false;
@@ -2188,8 +2189,10 @@
             setStatus('Creating...');
             try {
                 const res = await fetch('/api/canvases', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title})});
+                console.log('[createCanvas] response status:', res.status);
                 if(!res.ok) throw new Error(tr('canvas.createFailed'));
                 const data = await res.json();
+                console.log('[createCanvas] response data:', data);
                 canvas = data.canvas;
                 canvas.logs = canvas.logs || [];
                 nodes = canvas.nodes || [];
@@ -2204,8 +2207,9 @@
                 await loadCanvasList(false);
                 renderCanvasList();
             } catch(e) {
-                setStatus(tr('canvas.createFailed'));
-                console.error(e);
+                setStatus(tr('canvas.createFailed') + ': ' + (e.message || e));
+                console.error('[createCanvas] error:', e);
+                alert(tr('canvas.createFailed') + ': ' + (e.message || e));
             }
         }
         function toggleEmojiPicker(id, event){

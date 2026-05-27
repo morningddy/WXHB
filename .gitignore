@@ -3,16 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.dll
-*.exe
-*.pyd
-python/
 env/
-envs/
 venv/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Python debug symbols (very large, not needed for runtime)
+*.pdb
 
 # IDE
 .vscode/
@@ -35,3 +33,16 @@ packages/
 
 # get-pip.py
 get-pip.py
+
+# ComfyUI outputs
+output/
+temp/
+
+# API secrets
+API/.env
+
+# Temp/helper files not needed in repo
+python_embed.zip
+python_portable.zip
+setup_python.ps1
+运行说明.txt

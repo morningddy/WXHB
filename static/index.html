@@ -470,95 +470,6 @@
             border-color: var(--text);
         }
 
-        .side-pill.update-available {
-            border-color:#22c55e;
-            color:#16a34a;
-        }
-
-        html.theme-dark .side-pill.update-available,
-        body.theme-dark .side-pill.update-available {
-            border-color:#86efac;
-            color:#86efac;
-        }
-
-        .side-pill.update-available::after {
-            content:"";
-            position:absolute;
-            top:7px;
-            right:8px;
-            width:7px;
-            height:7px;
-            border-radius:999px;
-            background:#22c55e;
-            box-shadow:0 0 0 3px rgba(34,197,94,.14);
-        }
-
-        .update-card {
-            display:none;
-            width:44px;
-            min-height:36px;
-            padding:8px;
-            border-radius:18px;
-            border:1px solid rgba(34,197,94,.35);
-            background:rgba(240,253,244,.92);
-            color:#15803d;
-            overflow:hidden;
-            transition:width 0.3s var(--fluid-ease) 0.5s;
-        }
-
-        .update-card.show { display:block; }
-        .sidebar:hover .update-card { width:170px; transition-delay:0s; }
-        html.theme-dark .update-card,
-        body.theme-dark .update-card {
-            background:rgba(20,83,45,.22);
-            border-color:rgba(134,239,172,.28);
-            color:#bbf7d0;
-        }
-        .update-card-title {
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            gap:6px;
-            font-size:11px;
-            font-weight:900;
-            white-space:nowrap;
-        }
-        .sidebar:hover .update-card-title { justify-content:flex-start; }
-        .update-card-body {
-            display:none;
-            margin-top:5px;
-            font-size:10.5px;
-            line-height:1.35;
-            font-weight:700;
-            color:currentColor;
-            opacity:.86;
-        }
-        .sidebar:hover .update-card-body { display:block; }
-        .update-card-actions {
-            display:none;
-            gap:6px;
-            margin-top:8px;
-        }
-        .sidebar:hover .update-card-actions { display:flex; }
-        .update-link-btn {
-            height:26px;
-            padding:0 8px;
-            border-radius:999px;
-            background:#16a34a;
-            color:#fff;
-            font-size:10px;
-            font-weight:900;
-        }
-        .update-dismiss-btn {
-            height:26px;
-            width:26px;
-            border-radius:999px;
-            border:1px solid rgba(21,128,61,.22);
-            color:currentColor;
-            font-size:14px;
-            line-height:1;
-        }
-
         .side-pill svg { width: 16px; height: 16px; flex:0 0 auto; }
         .side-pill-text {
             opacity:0;
@@ -653,20 +564,6 @@
                     </svg>
                     <span class="side-pill-text" data-i18n="common.project">项目主页</span>
                 </button>
-                <div id="update-card" class="update-card">
-                    <div class="update-card-title">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;flex:0 0 auto">
-                            <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
-                            <path d="M21 3v6h-6"></path>
-                        </svg>
-                        <span data-i18n="update.available">发现更新</span>
-                    </div>
-                    <div id="update-card-body" class="update-card-body"></div>
-                    <div class="update-card-actions">
-                        <button class="update-link-btn" type="button" onclick="openProjectPage()" data-i18n="update.openProject">打开项目</button>
-                        <button class="update-dismiss-btn" type="button" onclick="dismissUpdateNotice()" title="忽略">×</button>
-                    </div>
-                </div>
             </div>
 
         </aside>
@@ -723,8 +620,7 @@
         const DEFAULT_PAGE_ID = 'canvas';
         const PAGE_IDS = ['canvas','api-settings','comfyui-settings'];
         const PROJECT_URL = 'https://github.com/hero8152/Infinite-Canvas';
-        const UPDATE_DISMISS_KEY = 'studio_update_dismissed_version';
-        let appInfo = { version:'', repo_url:PROJECT_URL, version_url:'https://raw.githubusercontent.com/hero8152/Infinite-Canvas/main/VERSION' };
+        let appInfo = { version:'', repo_url:PROJECT_URL };
 
         function switchUI(el, id, options = {}) {
             if(!PAGE_IDS.includes(id)) id = DEFAULT_PAGE_ID;
@@ -871,7 +767,6 @@
             updateThemeIcon(theme);
             if(window.StudioI18n) window.StudioI18n.apply();
             broadcastLanguage();
-            checkForUpdates();
         });
 
         // sync theme when iframe loads
@@ -890,66 +785,6 @@
             window.open(appInfo.repo_url || PROJECT_URL, '_blank', 'noopener');
         }
 
-        function versionParts(value) {
-            return String(value || '').match(/\d+/g)?.map(Number) || [];
-        }
-
-        function compareVersions(a, b) {
-            const aa = versionParts(a);
-            const bb = versionParts(b);
-            const len = Math.max(aa.length, bb.length);
-            for(let i = 0; i < len; i++){
-                const diff = (aa[i] || 0) - (bb[i] || 0);
-                if(diff) return diff;
-            }
-            return String(a || '').trim() === String(b || '').trim() ? 0 : 1;
-        }
-
-        function renderUpdateCardText() {
-            const card = document.getElementById('update-card');
-            if(!card?.classList.contains('show')) return;
-            const body = document.getElementById('update-card-body');
-            if(!body) return;
-            const remote = card.dataset.remoteVersion || '';
-            const local = card.dataset.localVersion || '';
-            const text = window.StudioI18n?.t
-                ? window.StudioI18n.t('update.versionLine').replace('{local}', local || '-').replace('{remote}', remote || '-')
-                : `本地 ${local || '-'} · 最新 ${remote || '-'}`;
-            body.textContent = text;
-        }
-
-        function showUpdateNotice(localVersion, remoteVersion) {
-            if(localStorage.getItem(UPDATE_DISMISS_KEY) === remoteVersion) return;
-            const card = document.getElementById('update-card');
-            const gitBtn = document.getElementById('github-entry-btn');
-            if(!card) return;
-            card.dataset.localVersion = localVersion || '';
-            card.dataset.remoteVersion = remoteVersion || '';
-            card.classList.add('show');
-            gitBtn?.classList.add('update-available');
-            renderUpdateCardText();
-        }
-
-        function dismissUpdateNotice() {
-            const card = document.getElementById('update-card');
-            const remote = card?.dataset.remoteVersion || '';
-            if(remote) localStorage.setItem(UPDATE_DISMISS_KEY, remote);
-            card?.classList.remove('show');
-            document.getElementById('github-entry-btn')?.classList.remove('update-available');
-        }
-
-        async function checkForUpdates() {
-            try {
-                const info = await fetch('/api/app-info', { cache:'no-store' }).then(r => r.json());
-                appInfo = {...appInfo, ...info};
-                const current = String(appInfo.version || '').trim();
-                const remoteText = await fetch(`${appInfo.version_url || ''}?t=${Date.now()}`, { cache:'no-store' }).then(r => r.ok ? r.text() : '');
-                const remote = String(remoteText || '').trim().split(/\r?\n/)[0].trim();
-                if(current && remote && compareVersions(remote, current) > 0) showUpdateNotice(current, remote);
-            } catch(e) {
-                // 离线包里没有网络时保持安静，不影响本地使用。
-            }
-        }
     </script>
 </body>
 
