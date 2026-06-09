@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo ============================================
@@ -14,13 +15,19 @@ if exist "%PYEXE%" (
     echo [INFO] Bundled Python not found, trying system Python...
     python --version >nul 2>&1
     if errorlevel 1 (
-        echo [ERROR] Python not found.
-        echo Please put the extracted python folder in the same directory.
-        pause
-        exit /b 1
+        echo [INFO] System Python not found, trying managed Python...
+        set "PYEXE=C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12\python.exe"
+        if not exist "!PYEXE!" (
+            echo [ERROR] Python not found.
+            echo Please install Python or put the extracted python folder in the same directory.
+            pause
+            exit /b 1
+        )
+        echo [OK] Using managed Python
+    ) else (
+        set "PYEXE=python"
+        echo [OK] Using system Python
     )
-    set "PYEXE=python"
-    echo [OK] Using system Python
 )
 
 echo.

@@ -2393,6 +2393,10 @@ def video_output_urls(raw):
             for item in result:
                 if isinstance(item, dict):
                     candidates.append(item)
+        # 云雾kling格式: data.task_result.videos
+        task_result = node.get("task_result") if isinstance(node, dict) else None
+        if isinstance(task_result, dict):
+            candidates.append(task_result)
     for node in candidates:
         if not isinstance(node, dict):
             continue
@@ -2424,15 +2428,24 @@ VIDEO_TASK_FAILURE_STATUSES = {
     "CANCELED", "CANCELLED", "TIMEOUT", "TIMEDOUT", "REJECTED", "EXPIRED",
 }
 
-async def wait_for_video_task(client, provider, task_id):
+async def wait_for_video_task(client, provider, task_id, model_name=""):
     base_url = video_api_root(provider)
     if not base_url:
         raise HTTPException(status_code=400, detail=f"{provider.get('name') or provider['id']} 未配置 Base URL")
-    if is_apimart_provider(provider):
+    is_yunwu = "yunwu.ai" in str(provider.get("base_url") or "").lower()
+    is_yunwu_kling = is_yunwu and "kling" in str(model_name).lower()
+    if is_yunwu_kling:
+        task_url = f"{base_url}/kling/v1/videos/omni-video/{task_id}"
+    elif is_apimart_provider(provider):
         task_path = f"{base_url}/tasks/{task_id}" if base_url.endswith("/v1") else f"{base_url}/v1/tasks/{task_id}"
         task_url = f"{task_path}?language=zh"
     else:
-        task_url = f"{base_url}/v2/videos/generations/{task_id}"
+        # OpenAI 兼容接口使用标准轮询路径；其余保留原 /v2/ 路径
+        proto = provider_protocol(provider)
+        if proto == "openai":
+            task_url = f"{base_url}/v1/videos/tasks/{task_id}"
+        else:
+            task_url = f"{base_url}/v2/videos/generations/{task_id}"
     deadline = time.monotonic() + VIDEO_POLL_TIMEOUT
     delay = max(2.0, IMAGE_POLL_INTERVAL)
     last_payload = {}
@@ -2473,9 +2486,25 @@ async def canvas_video(payload: CanvasVideoRequest):
     if not api_key:
         raise HTTPException(status_code=400, detail=f"未配置 {provider.get('name') or provider['id']} 的 API Key，请在 API 设置中填写。")
     is_apimart = is_apimart_provider(provider)
-    submit_url = f"{base_url}/videos/generations" if is_apimart and base_url.endswith("/v1") else f"{base_url}/v1/videos/generations" if is_apimart else f"{base_url}/v2/videos/generations"
+    # 检测云雾平台（yunwu.ai）
+    is_yunwu = "yunwu.ai" in str(provider.get("base_url") or "").lower()
     requested_model = selected_model(payload.model, "veo3-fast")
+    is_yunwu_kling = is_yunwu and "kling" in requested_model.lower()
     is_veo31 = is_apimart and is_apimart_veo31_model(requested_model)
+    # 根据协议类型决定视频提交接口路径
+    # 云雾 kling      → /kling/v1/videos/omni-video
+    # OpenAI 兼容     → /v1/videos/generations
+    # APIMart         → 按原规则
+    # 其他            → /v2/videos/generations（原默认）
+    proto = provider_protocol(provider)
+    if is_yunwu_kling:
+        submit_url = f"{base_url}/kling/v1/videos/omni-video"
+    elif proto == "openai":
+        submit_url = f"{base_url}/v1/videos/generations"
+    elif is_apimart:
+        submit_url = f"{base_url}/videos/generations" if base_url.endswith("/v1") else f"{base_url}/v1/videos/generations"
+    else:
+        submit_url = f"{base_url}/v2/videos/generations"
     try:
         async with httpx.AsyncClient(timeout=VIDEO_POLL_TIMEOUT) as client:
             # --- 构造图片载荷 ---
@@ -2554,6 +2583,31 @@ async def canvas_video(payload: CanvasVideoRequest):
                         body["return_last_frame"] = True
                     if payload.generate_audio:
                         body["generate_audio"] = True
+            elif is_yunwu_kling:
+                # 云雾 Kling Omni-Video 接口（非 OpenAI 格式）
+                def yunwu_kling_model_name(m):
+                    m = str(m or "").strip().lower()
+                    if "omni" in m:
+                        return "kling-v3-omni"
+                    return "kling-video-o1"
+                image_list = []
+                for ref in payload.images[:4]:
+                    if ref.url and ref.url.startswith(("http://", "https://")):
+                        img_type = "first_frame"
+                        if str(ref.role or "").strip().lower() in {"last_frame", "end_frame"}:
+                            img_type = "end_frame"
+                        image_list.append({"image_url": ref.url, "type": img_type})
+                body = {
+                    "model_name": yunwu_kling_model_name(requested_model),
+                    "prompt": payload.prompt,
+                    "mode": "std",
+                    "duration": str(payload.duration or "5"),
+                    "aspect_ratio": payload.aspect_ratio or "16:9",
+                }
+                if image_list:
+                    body["image_list"] = image_list
+                if payload.watermark:
+                    body["watermark_info"] = {"enabled": True}
             else:
                 # 非 APIMart：data URL 方式（OpenAI / ComflyAI 接口）
                 image_payload = []
@@ -2596,12 +2650,21 @@ async def canvas_video(payload: CanvasVideoRequest):
                 raw = response.json()
             except Exception:
                 # 上游返回了 HTML 错误页面或非 JSON 响应
-                resp_text = response.text[:500]
-                raise HTTPException(status_code=502, detail=f"上游视频接口返回非 JSON 响应（状态 {response.status_code}）：{resp_text}")
+                resp_text = response.text[:2000]
+                # 尝试从 HTML 中提取 title
+                title_match = re.search(r"<title[^>]*>(.*?)</title>", resp_text, re.IGNORECASE | re.DOTALL)
+                html_title = title_match.group(1).strip() if title_match else None
+                # 记录完整调试信息到日志
+                print(f"[DEBUG] 上游视频接口返回非JSON，URL: {submit_url}, 状态: {response.status_code}")
+                print(f"[DEBUG] 响应前500字符: {resp_text[:500]}")
+                if html_title:
+                    raise HTTPException(status_code=502, detail=f"上游视频接口返回了网页而不是JSON（状态 {response.status_code}）。页面标题：「{html_title}」。\n\n可能原因：\n1. API Key 无效或已过期，被重定向到登录页\n2. 请求地址不正确\n3. 上游服务正在维护\n\n请检查「API 设置」中的 Base URL 和 API Key 是否正确。")
+                else:
+                    raise HTTPException(status_code=502, detail=f"上游视频接口返回非 JSON 响应（状态 {response.status_code}），响应内容：{resp_text[:300]}")
             task_id = extract_task_id(raw) or raw.get("task_id") or raw.get("id")
             result = raw
             if task_id and not video_output_urls(raw):
-                result = await wait_for_video_task(client, provider, task_id)
+                result = await wait_for_video_task(client, provider, task_id, model_name=requested_model)
             urls = video_output_urls(result)
             if not urls:
                 raise HTTPException(status_code=502, detail=f"视频生成成功但没有返回视频：{result}")

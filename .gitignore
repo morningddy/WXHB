@@ -18,6 +18,7 @@ API/.env
 history.json
 data/canvases/
 data/conversations/
+data/api_providers.json
 
 # 备份文件
 *.backup

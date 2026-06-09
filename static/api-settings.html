@@ -52,13 +52,6 @@
         .provider-card.active .provider-meta { color:var(--muted); }
         .provider-mark { width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; background:var(--soft); color:var(--muted); }
         .provider-card.active .provider-mark { background:var(--panel); color:var(--text); }
-        .provider-card.provider-card-banner { padding:8px 10px; justify-content:center; min-height:44px; }
-        .provider-card-banner img { height:22px; width:auto; max-width:100%; object-fit:contain; display:block; }
-        .provider-card-banner .ms-icon-dark { display:none; }
-        body.studio-theme-dark .provider-card-banner .ms-icon-light,
-        html.studio-theme-dark body .provider-card-banner .ms-icon-light { display:none; }
-        body.studio-theme-dark .provider-card-banner .ms-icon-dark,
-        html.studio-theme-dark body .provider-card-banner .ms-icon-dark { display:block; }
         .provider-name { min-width:0; font-size:12.5px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .provider-meta { margin-top:1px; color:var(--faint); font-size:10px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .add-btn { width:100%; height:40px; border:1px dashed var(--line-strong); border-radius:12px; color:var(--muted); display:inline-flex; align-items:center; justify-content:center; gap:6px; font-size:12px; font-weight:800; transition:all .15s ease; }
@@ -582,14 +575,6 @@
         function renderProviderList(){
             providerList.innerHTML = sortedProviders().map(item => {
                 const active = item.id === selectedId ? 'active' : '';
-                if(item.id === 'modelscope'){
-                    return `
-                        <button class="provider-card provider-card-banner ${active}" type="button" onclick="selectProvider('${escapeHtml(item.id)}')">
-                            <img src="/static/modelscope.gif" alt="ModelScope" class="ms-icon-light">
-                            <img src="/static/modelscope-1.gif" alt="ModelScope" class="ms-icon-dark">
-                        </button>
-                    `;
-                }
                 return `
                     <button class="provider-card ${active}" type="button" onclick="selectProvider('${escapeHtml(item.id)}')">
                         <span class="provider-mark"><i data-lucide="${item.has_key ? 'key-round' : 'key'}" class="w-4 h-4"></i></span>

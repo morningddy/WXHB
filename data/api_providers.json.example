@@ -1,0 +1,25 @@
+[
+  {
+    "id": "modelscope",
+    "name": "ModelScope",
+    "base_url": "https://api-inference.modelscope.cn/v1",
+    "protocol": "openai",
+    "image_generation_endpoint": "",
+    "image_edit_endpoint": "",
+    "enabled": true,
+    "primary": false,
+    "image_models": [
+      "Tongyi-MAI/Z-Image-Turbo",
+      "Qwen/Qwen-Image-2512",
+      "Qwen/Qwen-Image-Edit-2511",
+      "black-forest-labs/FLUX.2-klein-9B"
+    ],
+    "chat_models": [
+      "Qwen/Qwen3-235B-A22B",
+      "Qwen/Qwen3-VL-235B-A22B-Instruct"
+    ],
+    "video_models": [],
+    "ms_loras": [],
+    "ms_defaults_version": 3
+  }
+]
