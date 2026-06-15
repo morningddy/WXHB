@@ -2433,9 +2433,12 @@ async def wait_for_video_task(client, provider, task_id, model_name=""):
     if not base_url:
         raise HTTPException(status_code=400, detail=f"{provider.get('name') or provider['id']} 未配置 Base URL")
     is_yunwu = "yunwu.ai" in str(provider.get("base_url") or "").lower()
-    is_yunwu_kling = is_yunwu and "kling" in str(model_name).lower()
-    if is_yunwu_kling:
-        task_url = f"{base_url}/kling/v1/videos/omni-video/{task_id}"
+    is_yunwu_kling = is_yunwu and any(k in str(model_name).lower() for k in ("kling", "omni"))
+    is_yunwu_grok = is_yunwu and any(g in str(model_name).lower() for g in ("grok",))
+    # 云雾视频统一查询接口：/v1/video/query?id={task_id}
+    # 返回字段：status (pending/success/failed), video_url
+    if is_yunwu_grok or is_yunwu_kling:
+        task_url = f"{base_url}/v1/video/query?id={task_id}"
     elif is_apimart_provider(provider):
         task_path = f"{base_url}/tasks/{task_id}" if base_url.endswith("/v1") else f"{base_url}/v1/tasks/{task_id}"
         task_url = f"{task_path}?language=zh"
@@ -2489,15 +2492,20 @@ async def canvas_video(payload: CanvasVideoRequest):
     # 检测云雾平台（yunwu.ai）
     is_yunwu = "yunwu.ai" in str(provider.get("base_url") or "").lower()
     requested_model = selected_model(payload.model, "veo3-fast")
-    is_yunwu_kling = is_yunwu and "kling" in requested_model.lower()
+    # 云雾各视频模型的接口路径不同
+    is_yunwu_kling = is_yunwu and any(k in requested_model.lower() for k in ("kling", "omni"))
+    is_yunwu_grok = is_yunwu and any(g in requested_model.lower() for g in ("grok",))
     is_veo31 = is_apimart and is_apimart_veo31_model(requested_model)
     # 根据协议类型决定视频提交接口路径
+    # 云雾 grok      → /v1/video/create
     # 云雾 kling      → /kling/v1/videos/omni-video
     # OpenAI 兼容     → /v1/videos/generations
     # APIMart         → 按原规则
     # 其他            → /v2/videos/generations（原默认）
     proto = provider_protocol(provider)
-    if is_yunwu_kling:
+    if is_yunwu_grok:
+        submit_url = f"{base_url}/v1/video/create"
+    elif is_yunwu_kling:
         submit_url = f"{base_url}/kling/v1/videos/omni-video"
     elif proto == "openai":
         submit_url = f"{base_url}/v1/videos/generations"
