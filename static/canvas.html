@@ -73,7 +73,12 @@
         .canvas-restore:hover { background:#ecfdf5; color:#059669; border-color:#a7f3d0; }
         .canvas-item.active .canvas-delete { background:rgba(255,255,255,.14); color:#fff; border-color:rgba(255,255,255,.18); opacity:1; }
         .canvas-item.active .canvas-delete:hover { background:rgba(248,113,113,.22); color:#fecaca; }
-        .toolbar { padding:6px; display:flex; gap:6px; align-items:center; border-radius:18px; }
+        .camera-panel { box-shadow:0 20px 60px rgba(0,0,0,.3); }
+        .camera-panel input[type="range"] { -webkit-appearance:none; width:100%; height:4px; border-radius:2px; background:var(--line-2); outline:none; }
+        .camera-panel input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; border-radius:50%; background:var(--strong); cursor:pointer; }
+        .camera-panel select { cursor:pointer; }
+        .camera-panel textarea { font-family:'Inter',monospace; }
+        .toolbar { padding:6px; display:flex; gap:6px; align-items:center; border-radius:18px; overflow:visible; }
         .toolbar-items { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; }
         .toolbar.collapsed .toolbar-items { display:none; }
         .toolbar-fixed { display:flex; gap:6px; align-items:center; }
@@ -865,6 +870,7 @@
                     <button class="tool-btn" onclick="openDirectorWindow()"><i data-lucide="cuboid" class="w-4 h-4"></i><span>3D 编辑器</span></button>
                 </div>
                 <div class="toolbar-fixed">
+                    <button class="tool-btn" onclick="toggleCameraPanel()" title="相机角度生图" aria-label="相机角度生图" style="color:#e93d82;"><i data-lucide="camera" class="w-4 h-4"></i></button>
                     <button class="tool-btn toolbar-log" onclick="openCanvasLog()" title="日志" aria-label="日志" data-i18n-title="canvas.logs"><i data-lucide="list-todo" class="w-4 h-4"></i><span data-i18n="canvas.logs">日志</span></button>
                 </div>
             </div>
@@ -9216,6 +9222,287 @@
             setCanvasMode(false);
         };
     </script>
+    <!-- 相机角度控制面板 (CameraWidget版) -->
+    <div id="cameraPanel" class="panel camera-panel" style="display:none; position:fixed; right:24px; top:80px; width:440px; max-height:calc(100vh - 100px); z-index:100; overflow:auto;">
+        <div class="camera-panel-header" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--line);">
+            <span style="font-size:12px; font-weight:800;">📷 相机角度生图</span>
+            <div style="display:flex; gap:4px;">
+                <button class="tool-btn" onclick="loadCanvasImageToCamera()" style="width:28px; height:28px; min-width:28px; padding:0;" title="加载画布选中图片"><i data-lucide="image-plus" class="w-3.5 h-3.5"></i></button>
+                <button class="tool-btn" onclick="toggleCameraPanel()" style="width:28px; height:28px; min-width:28px; padding:0;"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+        <div class="camera-panel-body" style="padding:12px;">
+            <!-- 顶部工具栏 -->
+            <div style="display:flex; gap:6px; margin-bottom:10px; align-items:center;">
+                <button id="camBtnEdit" class="tool-btn active" onclick="setCameraMode('edit')" style="flex:1; height:30px; font-size:11px; font-weight:700;">编辑模式</button>
+                <button id="camBtnCamera" class="tool-btn" onclick="setCameraMode('camera')" style="flex:1; height:30px; font-size:11px; font-weight:600;">相机视角</button>
+                <button class="tool-btn" onclick="resetCameraWidget()" title="重置" style="width:30px; min-width:30px; padding:0;"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i></button>
+                <label class="tool-btn" style="width:30px; min-width:30px; padding:0; cursor:pointer;" title="加载参考图">
+                    <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                    <input type="file" id="camImageInput" accept="image/*" onchange="loadCamImage(event)" style="display:none;">
+                </label>
+            </div>
+
+            <!-- 3D 视口 -->
+            <div id="cameraViewport" style="width:100%; height:260px; background:#0a0a0f; border-radius:10px; position:relative; overflow:hidden; margin-bottom:10px;"></div>
+
+            <!-- 当前状态 -->
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <div style="flex:1; background:var(--soft); border-radius:8px; padding:6px 10px; text-align:center;">
+                    <div style="font-size:9px; color:var(--muted);">方位角</div>
+                    <div id="camAzVal" style="font-size:13px; font-weight:800; color:#e93d82;">0°</div>
+                </div>
+                <div style="flex:1; background:var(--soft); border-radius:8px; padding:6px 10px; text-align:center;">
+                    <div style="font-size:9px; color:var(--muted);">仰角</div>
+                    <div id="camElVal" style="font-size:13px; font-weight:800; color:#00ffd0;">0°</div>
+                </div>
+                <div style="flex:1; background:var(--soft); border-radius:8px; padding:6px 10px; text-align:center;">
+                    <div style="font-size:9px; color:var(--muted);">距离</div>
+                    <div id="camDistVal" style="font-size:13px; font-weight:800; color:#ffb800;">5.0</div>
+                </div>
+            </div>
+
+            <!-- 提示词输出 -->
+            <div style="margin-bottom:10px;">
+                <label style="font-size:10px; font-weight:700; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span>生成提示词（点击可复制）</span>
+                </label>
+                <textarea id="cameraPromptOutput" readonly onclick="this.select(); document.execCommand('copy'); showToast('已复制','success')" placeholder="调整角度后自动生成..." style="width:100%; min-height:46px; padding:7px; border-radius:8px; border:1px solid var(--line); background:var(--soft); color:var(--text); font-size:11px; font-weight:600; resize:vertical;"></textarea>
+            </div>
+
+            <!-- 输出格式/模型 -->
+            <div style="margin-bottom:8px; font-size:10px; color:var(--muted);">
+                输出格式兼容 <b>Qwen-Image-Edit-2511-Multiple-Angles-LoRA</b> 模型
+            </div>
+
+            <!-- AI 多角度生图 -->
+            <div style="background:rgba(233,61,130,.06); border:1px solid rgba(233,61,130,.15); border-radius:10px; padding:10px; margin-bottom:10px;">
+                <div style="font-size:11px; font-weight:800; color:#e93d82; margin-bottom:6px;">🎨 AI 多角度生图</div>
+                <div style="font-size:10px; color:var(--muted); margin-bottom:6px;">以上传的参考图为基础，用相机角度 + 描述词生成新视角图片。</div>
+                <div style="font-size:10px; color:#ffb800; margin-bottom:6px;">⚡ 必选步骤：先点顶部的 🖼️ 加载图片 或 ⬆️ 上传原图</div>
+
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:10px; font-weight:600; color:var(--muted); display:block; margin-bottom:3px;">描述词（主体/风格等）</label>
+                    <input type="text" id="cameraExtraPrompt" placeholder="例如：a girl, cyberpunk style, neon lights, detailed face" style="width:100%; height:28px; border-radius:6px; border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:0 7px; font-size:11px;">
+                </div>
+
+                <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:6px; margin-bottom:8px;">
+                    <div>
+                        <label style="font-size:9px; font-weight:600; color:var(--muted); display:block; margin-bottom:2px;">模型</label>
+                        <select id="cameraApiModel" style="width:100%; height:26px; border-radius:6px; border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:0 5px; font-size:10px;">
+                            <option value="Qwen/Qwen-Image-Edit-2511">Qwen Edit ⭐</option>
+                            <option value="gpt-image-2">GPT Image 2</option>
+                            <option value="dall-e-3">DALL·E 3</option>
+                            <option value="gemini-2.0-flash-image">Gemini Flash</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:9px; font-weight:600; color:var(--muted); display:block; margin-bottom:2px;">尺寸</label>
+                        <select id="cameraImageSize" style="width:100%; height:26px; border-radius:6px; border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:0 5px; font-size:10px;">
+                            <option value="1024x1024">1:1</option>
+                            <option value="1024x1792" selected>16:9 横版</option>
+                            <option value="1792x1024">9:16 竖版</option>
+                            <option value="768x1344">9:16 竖版(小)</option>
+                            <option value="512x512">512²</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:9px; font-weight:600; color:var(--muted); display:block; margin-bottom:2px;">提供商</label>
+                        <select id="cameraProviderId" style="width:100%; height:26px; border-radius:6px; border:1px solid var(--line); background:var(--card-solid); color:var(--text); padding:0 5px; font-size:10px;">
+                            <option value="modelscope" selected>ModelScope</option>
+                            <option value="comfly">云幂</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button id="cameraGenerateBtn" onclick="generateCameraImage()" style="width:100%; height:36px; font-size:12px; font-weight:800; background:linear-gradient(135deg,#00ffd0,#00c9a7); color:#000; border:none; border-radius:8px; cursor:pointer;">
+                    ✨ 生成图片
+                </button>
+            </div>
+
+            <!-- 生成状态 -->
+            <div id="cameraGenStatus" style="display:none; padding:8px; border-radius:8px; font-size:10px; text-align:center;"></div>
+        </div>
+    </div>
+    
+    <!-- Three.js + CameraWidget -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="/static/camera-widget.js"></script>
+    <script>
+        // ========== 画布集成相机角度控制 ==========
+        let camWidget = null;
+
+        function toggleCameraPanel() {
+            const panel = document.getElementById('cameraPanel');
+            const visible = panel.style.display !== 'none';
+            panel.style.display = visible ? 'none' : 'block';
+            if (!visible && !camWidget) {
+                initCameraWidget();
+            }
+            if (!visible) updateCamPrompt();
+            lucide.createIcons();
+        }
+
+        function initCameraWidget() {
+            const container = document.getElementById('cameraViewport');
+            if (!container || camWidget) return;
+            const oldCanvas = container.querySelector('canvas');
+            if (oldCanvas) oldCanvas.remove();
+
+            camWidget = new CameraWidget({
+                container: container,
+                onStateChange: function(state) {
+                    document.getElementById('camAzVal').textContent = state.azimuth + '°';
+                    document.getElementById('camElVal').textContent = state.elevation + '°';
+                    document.getElementById('camDistVal').textContent = state.distance.toFixed(1);
+                    updateCamPrompt();
+                }
+            });
+            updateCamPrompt();
+        }
+
+        function setCameraMode(mode) {
+            const btnEdit = document.getElementById('camBtnEdit');
+            const btnCamera = document.getElementById('camBtnCamera');
+            if (mode === 'edit') {
+                btnEdit.classList.add('active'); btnCamera.classList.remove('active');
+            } else {
+                btnEdit.classList.remove('active'); btnCamera.classList.add('active');
+            }
+            if (camWidget) camWidget.setCameraView(mode === 'camera');
+        }
+
+        function resetCameraWidget() {
+            if (camWidget) { camWidget.resetToDefaults(); setCameraMode('edit'); }
+        }
+
+        function loadCamImage(event) {
+            const file = event.target.files[0];
+            if (!file || !camWidget) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                camWidget.setState({ imageUrl: e.target.result });
+                showToast('参考图已加载', 'success');
+            };
+            reader.readAsDataURL(file);
+            event.target.value = '';
+        }
+
+        function loadCanvasImageToCamera() {
+            if (!camWidget) { toggleCameraPanel(); return; }
+            // 获取画布中选中的图片节点
+            const sel = selectedNodes || [];
+            let imgNode = null;
+            for (const n of sel) {
+                if ((n.type === 'image' || n.nodeType === 'image') && n.url) { imgNode = n; break; }
+            }
+            if (!imgNode) {
+                for (const id in nodes) {
+                    const nd = nodes[id];
+                    if ((nd.type === 'image' || nd.nodeType === 'image') && nd.url) { imgNode = nd; break; }
+                }
+            }
+            if (!imgNode || !imgNode.url) {
+                showToast('⚠️ 请先在画布中选中一张图片，或手动上传参考图', 'warning');
+                return;
+            }
+            camWidget.setState({ imageUrl: imgNode.url });
+            showToast('✅ 已从画布加载参考图', 'success');
+        }
+
+        function updateCamPrompt() {
+            if (!camWidget) return;
+            const el = document.getElementById('cameraPromptOutput');
+            if (el) el.value = camWidget.getPrompt();
+        }
+
+        async function generateCameraImage() {
+            if (!camWidget) { initCameraWidget(); if(!camWidget) return; }
+
+            const extraPrompt = (document.getElementById('cameraExtraPrompt').value || '').trim();
+            const model = document.getElementById('cameraApiModel').value;
+            const size = document.getElementById('cameraImageSize').value;
+            const providerId = document.getElementById('cameraProviderId').value;
+            const refImageUrl = camWidget.state.imageUrl || '';
+            const cameraPrompt = camWidget.getPrompt();
+
+            let fullPrompt = extraPrompt ? (extraPrompt + '. ' + cameraPrompt) : cameraPrompt;
+            fullPrompt += '. IMPORTANT: change the camera viewpoint to match the angle description above. Do NOT keep the original angle from the reference image.';
+
+            const btn = document.getElementById('cameraGenerateBtn');
+            const statusEl = document.getElementById('cameraGenStatus');
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ 生成中...';
+            statusEl.style.display = 'block';
+            statusEl.textContent = '正在调用 API...';
+            statusEl.style.background = 'rgba(59,130,246,.1)';
+            statusEl.style.color = 'var(--muted)';
+
+            try {
+                const requestBody = {
+                    prompt: fullPrompt,
+                    model: model,
+                    size: size,
+                    quality: 'auto',
+                    provider_id: providerId
+                };
+
+                if (refImageUrl) {
+                    requestBody.reference_images = [{ url: refImageUrl, role: 'input' }];
+                }
+
+                const resp = await fetch('/api/online-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!resp.ok) {
+                    throw new Error(`API 错误 (${resp.status}): ${await resp.text()}`);
+                }
+
+                const data = await resp.json();
+                let url = '';
+                if (data.images && Array.isArray(data.images) && data.images[0]) url = data.images[0];
+                else if (data.data && Array.isArray(data.data) && data.data[0]) url = data.data[0].url || data.data[0].b64_json || data.data[0];
+                else if (data.url) url = data.url;
+
+                if (!url) throw new Error('未在响应中找到图片 URL');
+
+                addImageNodeFromUrl(url, fullPrompt);
+                statusEl.innerHTML = '✅ 图片已添加到画布！';
+                statusEl.style.background = 'rgba(16,185,129,.1)';
+                statusEl.style.color = '#10b981';
+                showToast('🎉 角度生图成功！', 'success');
+
+            } catch (err) {
+                statusEl.innerHTML = '❌ ' + err.message;
+                statusEl.style.background = 'rgba(239,68,68,.1)';
+                statusEl.style.color = '#ef4444';
+                showToast('生成失败: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '✨ 生成图片';
+                setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+            }
+        }
+
+        function addImageNodeFromUrl(url, caption) {
+            const node = addImageNode();
+            if (!node) return;
+            node.url = url;
+            node.name = '相机角度生图';
+            node.prompt = caption || '';
+            render(); scheduleSave(); saveCanvas();
+            setTimeout(() => {
+                const el = document.getElementById('node-' + node.id);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+
+        updateCamPrompt();
+        lucide.createIcons();
+    </script>
 </body>
 </html>
-

@@ -9,6 +9,7 @@
     "enabled": true,
     "primary": false,
     "image_models": [
+      "Qwen/Qwen-Image-Edit",
       "Tongyi-MAI/Z-Image-Turbo",
       "Qwen/Qwen-Image-2512",
       "Qwen/Qwen-Image-Edit-2511",
@@ -58,21 +59,24 @@
     "enabled": true,
     "primary": false,
     "image_models": [
-      "gemini-3-pro-image-preview",
-      "gemini-3.1-flash-image-preview",
       "gpt-image-2",
       "qwen-image-edit-2509",
-      "z-image-turbo"
+      "z-image-turbo",
+      "gemini-3-pro-image-preview",
+      "gemini-3.1-flash-image-preview"
     ],
     "chat_models": [
-      "gemini-3.5-flash",
-      "gpt-5.5"
+      "gpt-5.5",
+      "gemini-3.5-flash"
     ],
     "video_models": [
       "MiniMax-Hailuo-02",
       "MiniMax-Hailuo-2.3",
       "grok-video-3",
+      "grok-video-3-10s",
       "kling-advanced-custom-elements",
+      "kling-omni-image",
+      "kling-omni-video",
       "sora-2",
       "sora-2-pro"
     ],

@@ -636,20 +636,13 @@
                     </svg>
                     <span class="side-pill-text" data-i18n="common.apiSettings">API 设置</span>
                 </button>
-                <div id="update-card" class="update-card">
-                    <div class="update-card-title">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;flex:0 0 auto">
-                            <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
-                            <path d="M21 3v6h-6"></path>
-                        </svg>
-                        <span data-i18n="update.available">发现更新</span>
-                    </div>
-                    <div id="update-card-body" class="update-card-body"></div>
-                    <div class="update-card-actions">
-                        <button class="update-link-btn" type="button" onclick="openProjectPage()" data-i18n="update.openProject">打开项目</button>
-                        <button class="update-dismiss-btn" type="button" onclick="dismissUpdateNotice()" title="忽略">×</button>
-                    </div>
-                </div>
+                <button class="side-pill" onclick="openCameraPage()" type="button" title="相机角度控制">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                    <span class="side-pill-text">相机角度</span>
+                </button>
             </div>
 
         </aside>
@@ -871,6 +864,10 @@
 
         function openProjectPage() {
             window.open(appInfo.repo_url || PROJECT_URL, '_blank', 'noopener');
+        }
+
+        function openCameraPage() {
+            window.open('/static/camera.html', '_blank', 'width=1100,height=800,noopener');
         }
 
         function versionParts(value) {

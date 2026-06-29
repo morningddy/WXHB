@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>相机角度控制 - WXHB</title>
+<style>
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a2e;
+    --bg-card: #16161f;
+    --border-color: #2a2a3a;
+    --text-primary: #e8e8f0;
+    --text-secondary: #9898a8;
+    --accent: #00ff88;
+    --accent-dim: #00cc6a;
+    --accent-glow: rgba(0,255,136,0.15);
+    --danger: #ff6b6b;
+    --warning: #ffa800;
+    --info: #00b4d8;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+
+  /* 顶部栏 */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 10;
+  }
+  .topbar h1 {
+    font-size: 14px; font-weight: 700; color: var(--accent);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .topbar h1 .icon { font-size: 18px; }
+  .topbar-actions { display: flex; gap: 8px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: var(--radius);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary); color: var(--text-primary);
+    transition: all .15s;
+  }
+  .btn:hover { background: var(--bg-card); border-color: var(--accent); }
+  .btn-accent {
+    background: var(--accent); color: #000; border-color: var(--accent);
+    font-weight: 700;
+  }
+  .btn-accent:hover { background: var(--accent-dim); }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+  /* 主体布局 */
+  .main-layout {
+    flex: 1; display: flex; overflow: hidden;
+  }
+
+  /* 左侧3D视口 */
+  .viewport-panel {
+    flex: 1; position: relative; background: var(--bg-primary);
+    display: flex; flex-direction: column;
+  }
+  .viewport-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px; color: var(--text-secondary);
+  }
+  .viewport-container {
+    flex: 1; position: relative; overflow: hidden;
+  }
+  .viewport-container > canvas, .viewport-container > div {
+    width: 100% !important; height: 100% !important;
+  }
+
+  .mode-toggle {
+    display: flex; background: var(--bg-tertiary);
+    border-radius: 6px; padding: 2px; gap: 2px;
+  }
+  .mode-toggle button {
+    padding: 4px 12px; border: none; border-radius: 4px;
+    font-size: 11px; cursor: pointer;
+    background: transparent; color: var(--text-secondary);
+    transition: all .15s;
+  }
+  .mode-toggle button.active {
+    background: var(--accent); color: #000; font-weight: 700;
+  }
+
+  /* 右侧控制面板 */
+  .control-panel {
+    width: 300px; min-width: 260px;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+  .panel-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .panel-section:last-child { border-bottom: none; }
+  .section-title {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-secondary); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  /* 滑块控件 */
+  .slider-group { margin-bottom: 12px; }
+  .slider-label {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
+  }
+  .slider-label span:first-child { font-size: 12px; font-weight: 600; }
+  .slider-value {
+    font-size: 11px; font-weight: 700;
+    color: var(--accent); min-width: 60px; text-align: right;
+  }
+  input[type="range"] {
+    -webkit-appearance: none; width: 100%; height: 4px;
+    border-radius: 2px; background: var(--bg-tertiary);
+    outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--accent);
+    border: 2px solid var(--bg-secondary);
+    box-shadow: 0 0 6px var(--accent-glow);
+  }
+
+  /* 下拉选择 */
+  .preset-group { margin-bottom: 10px; }
+  .preset-label {
+    font-size: 11px; font-weight: 600; margin-bottom: 4px;
+    color: var(--text-secondary);
+  }
+  select {
+    width: 100%; padding: 6px 10px;
+    background: var(--bg-tertiary); color: var(--text-primary);
+    border: 1px solid var(--border-color); border-radius: 6px;
+    font-size: 12px; cursor: pointer; outline: none;
+  }
+  select:focus { border-color: var(--accent); }
+
+  /* 提示词输出 */
+  .prompt-output {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 10px 12px; margin-top: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 12.5px; line-height: 1.6;
+    color: var(--accent);
+    word-break: break-all;
+    min-height: 48px; position: relative;
+  }
+  .prompt-actions {
+    display: flex; gap: 6px; margin-top: 8px;
+  }
+  .copy-btn {
+    flex: 1; padding: 6px; border: 1px solid var(--border-color);
+    border-radius: 6px; background: var(--bg-tertiary);
+    color: var(--text-primary); font-size: 11px;
+    cursor: pointer; text-align: center;
+    transition: all .15s;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+
+  /* 状态信息 */
+  .state-display {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+    margin-top: 8px;
+  }
+  .state-item {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px; padding: 6px 8px;
+    text-align: center;
+  }
+  .state-item .label { font-size: 9px; color: var(--text-secondary); margin-bottom: 2px; }
+  .state-item .value { font-size: 12px; font-weight: 700; color: var(--accent); }
+
+  /* 说明文字 */
+  .hint-text { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+  .hint-text code {
+    background: var(--bg-primary); padding: 1px 5px;
+    border-radius: 3px; font-size: 11px;
+    color: var(--accent);
+  }
+
+  /* 响应式 */
+  @media (max-width: 700px) {
+    .main-layout { flex-direction: column; }
+    .control-panel { width: 100%; min-width: unset; max-height: 45vh; }
+  }
+
+  /* 滚动条 */
+  .control-panel::-webkit-scrollbar { width: 5px; }
+  .control-panel::-webkit-scrollbar-track { background: transparent; }
+  .control-panel::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- 顶部栏 -->
+<div class="topbar">
+  <h1><span class="icon">🎥</span> 相机角度控制 · Camera Angle</h1>
+  <div class="topbar-actions">
+    <button class="btn btn-sm" onclick="resetAll()">↺ 重置</button>
+    <button class="btn btn-sm" onclick="loadImage()">🖼️ 加载图片</button>
+    <button class="btn btn-sm" onclick="window.close()">✕ 关闭</button>
+  </div>
+</div>
+
+<!-- 主体 -->
+<div class="main-layout">
+
+  <!-- 左侧3D视口 -->
+  <div class="viewport-panel">
+    <div class="viewport-header">
+      <span>📐 3D 相机预览（拖拽彩色手柄调整角度）</span>
+      <div class="mode-toggle">
+        <button id="btn-edit" class="active" onclick="switchMode('edit')">编辑模式</button>
+        <button id="btn-camera" onclick="switchMode('camera')">相机视角</button>
+      </div>
+    </div>
+    <div class="viewport-container" id="viewport"></div>
+  </div>
+
+  <!-- 右侧控制面板 -->
+  <div class="control-panel">
+
+    <!-- 方位角 -->
+    <div class="panel-section">
+      <div class="section-title">↻ 水平角度（Azimuth）</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>方位角</span>
+          <span class="slider-value" id="val-azimuth">0°</span>
+        </div>
+        <input type="range" min="0" max="360" step="1" value="0"
+               oninput="onSliderChange('azimuth', this.value)">
+      </div>
+      <div class="preset-group">
+        <div class="preset-label">预设视角</div>
+        <select onchange="onPresetAzimuth(this.value)">
+          <option value="">-- 选择预设 --</option>
+          <option value="0">🎯 正面视角（Front）</option>
+          <option value="45">↗ 右前方（Front-Right）</option>
+          <option value="90">▶ 右侧视角（Right Side）</option>
+          <option value="135">↘ 右后方（Back-Right）</option>
+          <option value="180">◀ 背面视角（Back）</option>
+          <option value="225">↙ 左后方（Back-Left）</option>
+          <option value="270">◀ 左侧视角（Left Side）</option>
+          <option value="315">↖ 左前方（Front-Left）</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 仰角 -->
+    <div class="panel-section">
+      <div class="section-title">↕ 垂直角度（Elevation）</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>仰角</span>
+          <span class="slider-value" id="val-elevation">0°</span>
+        </div>
+        <input type="range" min="-30" max="60" step="1" value="0"
+               oninput="onSliderChange('elevation', this.value)">
+      </div>
+      <div class="preset-group">
+        <div class="preset-label">预设仰角</div>
+        <select onchange="onPresetElevation(this.value)">
+          <option value="">-- 选择预设 --</option>
+          <option value="-20">📷 仰拍（Low-Angle）</option>
+          <option value="0">🎯 平视（Eye-Level）</option>
+          <option value="30">📸 高角度（Elevated）</option>
+          <option value="55">🔽 俯拍（High-Angle）</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 距离 -->
+    <div class="panel-section">
+      <div class="section-title">🔍 距离（Distance）</div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>距离</span>
+          <span class="slider-value" id="val-distance">5.0</span>
+        </div>
+        <input type="range" min="0" max="10" step="0.1" value="5"
+               oninput="onSliderChange('distance', this.value)">
+      </div>
+      <div class="preset-group">
+        <div class="preset-label">预设距离</div>
+        <select onchange="onPresetDistance(this.value)">
+          <option value="">-- 选择预设 --</option>
+          <option value="1">🌄 远景（Wide Shot）</option>
+          <option value="5">🎬 中景（Medium Shot）</option>
+          <option value="9">👤 特写（Close-Up）</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 状态显示 -->
+    <div class="panel-section">
+      <div class="section-title">📊 当前状态</div>
+      <div class="state-display">
+        <div class="state-item">
+          <div class="label">方位角</div>
+          <div class="value" id="state-az">0°</div>
+        </div>
+        <div class="state-item">
+          <div class="label">仰角</div>
+          <div class="value" id="state-el">0°</div>
+        </div>
+        <div class="state-item">
+          <div class="label">距离</div>
+          <div class="value" id="state-dist">5.0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 提示词输出 -->
+    <div class="panel-section">
+      <div class="section-title">💬 生成提示词（点击复制）</div>
+      <div class="hint-text" style="margin-bottom:8px;">
+        输出格式兼容 <code>Qwen-Image-Edit-2511-Multiple-Angles-LoRA</code> 模型
+      </div>
+      <div class="prompt-output" id="prompt-output" onclick="copyPrompt()">
+        &lt;sks&gt; front view eye-level shot medium shot
+      </div>
+      <div class="prompt-actions">
+        <button class="copy-btn" id="copy-btn" onclick="copyPrompt()">📋 复制英文提示词</button>
+        <button class="copy-btn" onclick="copyPromptZh()">📋 复制中文提示词</button>
+      </div>
+    </div>
+
+    <!-- AI 生图 -->
+    <div class="panel-section">
+      <div class="section-title">🎨 AI 多角度生图</div>
+      <div class="hint-text" style="margin-bottom:8px;">
+        以<b>上传的参考图</b>为基础，用相机角度 + 描述词生成新视角图片
+        <br>💡 <b>必选步骤：</b>先点顶部「🖼️ 加载图片」上传原图
+      </div>
+      <!-- 附加提示词 -->
+      <div style="margin-bottom:10px;">
+        <div class="preset-label">描述词（主体/风格等）</div>
+        <textarea id="gen-prompt" rows="2" placeholder="例如: a girl, cyberpunk style, neon lights, detailed face"
+          style="width:100%; padding:8px; background:var(--bg-primary); color:var(--text-primary); border:1px solid var(--border-color); border-radius:6px; font-size:12px; resize:vertical; outline:none;"></textarea>
+      </div>
+      <!-- 模型选择 -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+        <div>
+          <div class="preset-label">模型</div>
+          <select id="gen-model">
+            <option value="gpt-image-2">GPT Image 2</option>
+            <option value="dall-e-3">DALL·E 3</option>
+            <option value="flux">Flux</option>
+            <option value="sd3">SD3</option>
+          </select>
+        </div>
+        <div>
+          <div class="preset-label">尺寸</div>
+          <select id="gen-size">
+            <option value="1024x1024">1:1 方形</option>
+            <option value="1792x1024" selected>16:9 横版</option>
+            <option value="1024x1792">9:16 竖版</option>
+          </select>
+        </div>
+      </div>
+      <!-- 生成按钮 -->
+      <button class="btn btn-accent" style="width:100%; justify-content:center; padding:10px; font-size:13px;" id="gen-btn" onclick="generateImage()">
+        🚀 生成图片
+      </button>
+      <!-- 生成状态 -->
+      <div id="gen-status" style="margin-top:8px; font-size:11px; color:var(--text-secondary); display:none;"></div>
+      <!-- 图片预览 -->
+      <div id="gen-result" style="margin-top:10px; display:none;">
+        <img id="gen-img" style="width:100%; border-radius:8px; border:1px solid var(--border-color);" />
+        <div class="prompt-actions" style="margin-top:6px;">
+          <button class="copy-btn" onclick="downloadGenImage()">💾 下载图片</button>
+          <button class="copy-btn" onclick="copyGenImageUrl()">🔗 复制链接</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 使用说明 -->
+    <div class="panel-section">
+      <div class="section-title">💡 使用说明</div>
+      <div class="hint-text">
+        <b>拖拽操作：</b>在3D视口中拖拽<b>绿色手柄</b>（方位）、<b>青色手柄</b>（仰角）、<b>橙色手柄</b>（距离）<br><br>
+        <b>相机视角模式：</b>切换到「相机视角」后可旋转/缩放预览<br><br>
+        <b>配合文生图：</b>复制提示词 → 粘贴到文生图提示词框 → 生成对应角度的图像
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Three.js (r160 支持 outputColorSpace / SRGBColorSpace) -->
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<!-- Camera Widget -->
+<script src="camera-widget.js"></script>
+
+<script>
+let widget = null;
+
+function init() {
+  const container = document.getElementById('viewport');
+  widget = new CameraWidget({
+    container: container,
+    initialState: { azimuth: 0, elevation: 0, distance: 5 },
+    onStateChange: function(state) {
+      updateUI(state);
+    }
+  });
+  updateUI(widget.getState());
+  updatePrompt();
+}
+
+function updateUI(state) {
+  document.getElementById('val-azimuth').textContent = Math.round(state.azimuth) + '°';
+  document.getElementById('val-elevation').textContent = Math.round(state.elevation) + '°';
+  document.getElementById('val-distance').textContent = Number(state.distance).toFixed(1);
+  document.getElementById('state-az').textContent = Math.round(state.azimuth) + '°';
+  document.getElementById('state-el').textContent = Math.round(state.elevation) + '°';
+  document.getElementById('state-dist').textContent = Number(state.distance).toFixed(1);
+  // 同步滑块
+  const azSlider = document.querySelector('input[type=range][min="0"]');
+  if (azSlider) azSlider.value = state.azimuth;
+  const elSlider = document.querySelectorAll('input[type=range]')[1];
+  if (elSlider) elSlider.value = state.elevation;
+  const distSlider = document.querySelectorAll('input[type=range]')[2];
+  if (distSlider) distSlider.value = state.distance;
+}
+
+function onSliderChange(key, value) {
+  const num = Number(value);
+  if (key === 'azimuth') {
+    widget.setState({ azimuth: num });
+  } else if (key === 'elevation') {
+    widget.setState({ elevation: num });
+  } else if (key === 'distance') {
+    widget.setState({ distance: num });
+  }
+  updateUI(widget.getState());
+  updatePrompt();
+}
+
+function onPresetAzimuth(val) {
+  if (!val) return;
+  widget.setState({ azimuth: Number(val) });
+  updateUI(widget.getState());
+  updatePrompt();
+  // 重置选择
+  event.target.selectedIndex = 0;
+}
+function onPresetElevation(val) {
+  if (!val) return;
+  widget.setState({ elevation: Number(val) });
+  updateUI(widget.getState());
+  updatePrompt();
+  event.target.selectedIndex = 0;
+}
+function onPresetDistance(val) {
+  if (!val) return;
+  widget.setState({ distance: Number(val) });
+  updateUI(widget.getState());
+  updatePrompt();
+  event.target.selectedIndex = 0;
+}
+
+function switchMode(mode) {
+  const btnEdit = document.getElementById('btn-edit');
+  const btnCamera = document.getElementById('btn-camera');
+  if (mode === 'edit') {
+    btnEdit.classList.add('active');
+    btnCamera.classList.remove('active');
+    widget.setCameraView(false);
+  } else {
+    btnCamera.classList.add('active');
+    btnEdit.classList.remove('active');
+    widget.setCameraView(true);
+  }
+}
+
+function updatePrompt() {
+  const en = widget.getPrompt();
+  const zh = widget.getPromptZh();
+  document.getElementById('prompt-output').textContent = en;
+  document.getElementById('prompt-output').dataset.zh = zh;
+  document.getElementById('prompt-output').dataset.en = en;
+}
+
+function copyPrompt() {
+  const text = document.getElementById('prompt-output').dataset.en || widget.getPrompt();
+  navigator.clipboard.writeText(text).then(function() {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '✅ 已复制！';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = '📋 复制英文提示词'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function copyPromptZh() {
+  const text = document.getElementById('prompt-output').dataset.zh || widget.getPromptZh();
+  navigator.clipboard.writeText(text).then(function() {
+    const btns = document.querySelectorAll('.copy-btn');
+    const btn = btns[1];
+    btn.textContent = '✅ 已复制！';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = '📋 复制中文提示词'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function resetAll() {
+  widget.resetToDefaults();
+  updateUI(widget.getState());
+  updatePrompt();
+}
+
+function loadImage() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = function() {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      widget.setState({ imageUrl: e.target.result });
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+// ====== AI 生图功能 ======
+let genImageUrl = '';
+
+async function generateImage() {
+  const btn = document.getElementById('gen-btn');
+  const statusEl = document.getElementById('gen-status');
+  const resultEl = document.getElementById('gen-result');
+  const imgEl = document.getElementById('gen-img');
+
+  // 获取参数
+  const cameraPrompt = document.getElementById('prompt-output').dataset.en || widget.getPrompt();
+  const extraPrompt = document.getElementById('gen-prompt').value.trim();
+  const model = document.getElementById('gen-model').value;
+  const size = document.getElementById('gen-size').value;
+
+  // 获取3D视口中加载的参考图
+  const refImageUrl = (widget && widget.state) ? widget.state.imageUrl || '' : '';
+
+  if (!refImageUrl) {
+    statusEl.style.display = 'block';
+    statusEl.style.color = 'var(--warning)';
+    statusEl.textContent = '⚠️ 请先上传一张参考图片（点击顶部「🖼️ 加载图片」），再生成新角度图片';
+    return;
+  }
+
+  // 组合提示词 — 相机角度 + 描述词（描述词在前，强调主体）
+  let fullPrompt = '';
+  const angleDesc = cameraPrompt; // 已经是自然语言，如 "front view, eye-level shot, medium shot -- change camera angle..."
+  if (extraPrompt) {
+    fullPrompt = extraPrompt + '. ' + angleDesc;
+  } else {
+    fullPrompt = angleDesc;
+  }
+
+  // 图生图时，加强「改变角度」的指令，让模型明确知道要换视角而非简单重绘
+  fullPrompt += '. IMPORTANT: change the camera viewpoint to match the angle description above. Do NOT keep the original angle from the reference image.';
+
+  // UI 状态
+  btn.disabled = true;
+  btn.innerHTML = '⏳ 生成中...';
+  statusEl.style.display = 'block';
+  statusEl.textContent = '正在调用 API，以参考图为基础生成新角度图片...';
+  resultEl.style.display = 'none';
+
+  try {
+    // 构建请求体，带上参考图
+    const requestBody = {
+      prompt: fullPrompt,
+      model: model,
+      size: size,
+      quality: 'auto'
+    };
+
+    // 如果有参考图，作为 reference_images 传入（图生图模式）
+    if (refImageUrl) {
+      requestBody.reference_images = [{
+        url: refImageUrl,
+        role: 'input'
+      }];
+    }
+
+    const resp = await fetch('/api/online-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`API 错误 (${resp.status}): ${errText}`);
+    }
+
+    const data = await resp.json();
+
+    // 提取图片 URL（WXHB /api/online-image 返回格式）
+    let url = '';
+    if (data.images && Array.isArray(data.images) && data.images[0]) {
+      url = data.images[0];
+    } else if (data.data && Array.isArray(data.data) && data.data[0]) {
+      url = data.data[0].url || data.data[0].b64_json || data.data[0];
+    } else if (data.url) {
+      url = data.url;
+    } else if (typeof data === 'string' && data.startsWith('http')) {
+      url = data;
+    }
+
+    if (!url) throw new Error('未在响应中找到图片 URL。响应内容: ' + JSON.stringify(data).substring(0, 200));
+
+    genImageUrl = url;
+
+    // 处理 base64
+    if (url.startsWith('data:') || (url.length > 200 && !url.startsWith('http'))) {
+      imgEl.src = url;
+    } else {
+      imgEl.src = url;
+    }
+
+    resultEl.style.display = 'block';
+    statusEl.style.color = 'var(--accent)';
+    statusEl.textContent = '✅ 图片生成成功！';
+
+  } catch (err) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = '❌ ' + err.message;
+    console.error('[Camera] 生图失败:', err);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 生成图片';
+  }
+}
+
+function downloadGenImage() {
+  if (!genImageUrl) return;
+  const a = document.createElement('a');
+  a.href = genImageUrl;
+  a.download = 'camera-angle-' + Date.now() + '.png';
+  a.target = '_blank';
+  a.click();
+}
+
+function copyGenImageUrl() {
+  if (!genImageUrl) return;
+  navigator.clipboard.writeText(genImageUrl).then(() => {
+    alert('图片链接已复制！');
+  });
+}
+
+// 初始化
+window.addEventListener('DOMContentLoaded', init);
+// 清理
+window.addEventListener('beforeunload', function() {
+  if (widget) widget.dispose();
+});
+</script>
+</body>
+</html>

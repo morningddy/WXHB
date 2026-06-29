@@ -1296,6 +1296,20 @@ def output_file_from_url(url):
         return None
     return path
 
+def parse_data_url(url):
+    """解析 base64 data URL，返回 (BytesIO, filename, content_type) 或 None。"""
+    if not url or not isinstance(url, str) or not url.startswith("data:"):
+        return None
+    try:
+        header, b64 = url.split(",", 1)
+        media = header.split(";", 1)[0]  # e.g. "image/png"
+        ext_map = {"image/png": ".png", "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/webp": ".webp"}
+        ext = ext_map.get(media, ".png")
+        return (BytesIO(base64.b64decode(b64)), f"upload_{uuid.uuid4().hex[:8]}{ext}", media)
+    except Exception as e:
+        print(f"[camera] data URL 解析失败: {e}")
+        return None
+
 def content_type_for_path(path):
     ext = os.path.splitext(path)[1].lower()
     if ext in [".mp4", ".m4v"]:
@@ -1834,18 +1848,33 @@ async def generate_ai_image(prompt, size, quality, model, reference_images=None,
             edit_failed_text = ""
             try:
                 for ref in image_refs[:4]:
-                    path = output_file_from_url(ref.get("url", ""))
-                    if not path:
+                    ref_url = ref.get("url", "")
+                    # 优先尝试本地文件路径
+                    path = output_file_from_url(ref_url)
+                    if path:
+                        fh = open(path, "rb")
+                        opened.append(fh)
+                        files.append(("image", (os.path.basename(path), fh, content_type_for_path(path))))
                         continue
-                    fh = open(path, "rb")
-                    opened.append(fh)
-                    files.append(("image", (os.path.basename(path), fh, content_type_for_path(path))))
+                    # 尝试解析 base64 data URL
+                    parsed = parse_data_url(ref_url)
+                    if parsed:
+                        buf, fname, ctype = parsed
+                        opened.append(buf)
+                        files.append(("image", (fname, buf, ctype)))
                 if mask_refs:
-                    mask_path = output_file_from_url(mask_refs[0].get("url", ""))
+                    mask_url = mask_refs[0].get("url", "")
+                    mask_path = output_file_from_url(mask_url)
                     if mask_path:
                         fh = open(mask_path, "rb")
                         opened.append(fh)
                         files.append(("mask", (os.path.basename(mask_path), fh, content_type_for_path(mask_path))))
+                    else:
+                        mask_parsed = parse_data_url(mask_url)
+                        if mask_parsed:
+                            buf, fname, ctype = mask_parsed
+                            opened.append(buf)
+                            files.append(("mask", (fname, buf, ctype)))
                 try:
                     response = await post_openai_edits(files)
                     if response.status_code >= 400:
